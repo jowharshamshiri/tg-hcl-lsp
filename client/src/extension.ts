@@ -41,7 +41,9 @@ export function activate(context: ExtensionContext) {
         clientOptions
     );
 
-    client.start();
+    client.start().then(() => {
+		console.log('Server capabilities:', client.initializeResult?.capabilities);
+	});
 }
 
 export function deactivate(): Thenable<void> | undefined {

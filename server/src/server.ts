@@ -27,33 +27,23 @@ import {
     TextDocument
 } from 'vscode-languageserver-textdocument';
 
+import { validBlocks, terragruntFunctions } from './terragruntDefinitions';
+
 import * as path from 'path';
 import * as fs from 'fs';
 import { URI } from 'vscode-uri';
 
+console.log('Terragrunt Language Server: Starting up');
+
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
 const connection = createConnection(ProposedFeatures.all);
-const validBlocks = [
-	'terraform', 'include', 'locals', 'inputs', 'dependency',
-	'generate', 'remote_state', 'terraform_version_constraint',
-	'terragrunt_version_constraint', 'download_dir', 'skip'
-];
-const terragruntFunctions = [
-    'get_env', 'get_terraform_commands_that_need_vars', 'get_terraform_commands_that_need_input',
-    'get_terraform_commands_that_need_locking', 'get_terraform_commands_that_need_parallelism',
-    'get_parent_terragrunt_dir', 'path_relative_to_include', 'path_relative_from_include',
-    'find_in_parent_folders', 'get_terragrunt_dir', 'get_original_terragrunt_dir',
-    'get_terraform_command', 'get_aws_account_id', 'get_aws_caller_identity_arn',
-    'get_aws_caller_identity_user_id', 'get_terraform_cli_args', 'get_terraform_workspace',
-    'run_cmd', 'read_terragrunt_config', 'sops_decrypt_file'
-];
 
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
-const hasConfigurationCapability = false;
-const hasWorkspaceFolderCapability = false;
-const hasDiagnosticRelatedInformationCapability = false;
+let hasConfigurationCapability = false;
+let hasWorkspaceFolderCapability = false;
+let hasDiagnosticRelatedInformationCapability = false;
 
 function parseTerragruntHCL(text: string): any {
     const blocks: any = {};
@@ -153,6 +143,53 @@ function getTerraformVariables(sourcePath: string): string[] {
     return Array.from(variables);
 }
 
+connection.onInitialize((params: InitializeParams) => {
+    const capabilities = params.capabilities;
+
+    // Does the client support the `workspace/configuration` request?
+    // If not, we fall back using global settings.
+    hasConfigurationCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.configuration
+    );
+    hasWorkspaceFolderCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.workspaceFolders
+    );
+    hasDiagnosticRelatedInformationCapability = !!(
+        capabilities.textDocument &&
+        capabilities.textDocument.publishDiagnostics &&
+        capabilities.textDocument.publishDiagnostics.relatedInformation
+    );
+
+    const result: InitializeResult = {
+        capabilities: {
+            textDocumentSync: TextDocumentSyncKind.Incremental,
+            completionProvider: {
+                resolveProvider: true,
+                triggerCharacters: ['.', '=', '"']
+            },
+            definitionProvider: true,
+            documentLinkProvider: {
+                resolveProvider: true
+            },
+            diagnosticProvider: {
+                interFileDependencies: false,
+                workspaceDiagnostics: false
+            },
+			hoverProvider: true,
+			signatureHelpProvider: {
+				triggerCharacters: ['(', ',']
+			}
+        }
+    };
+    if (hasWorkspaceFolderCapability) {
+        result.capabilities.workspace = {
+            workspaceFolders: {
+                supported: true
+            }
+        };
+    }
+    return result;
+});
 
 connection.onInitialized(() => {
     if (hasConfigurationCapability) {
@@ -163,6 +200,7 @@ connection.onInitialized(() => {
             connection.console.log('Workspace folder change event received.');
         });
     }
+	console.log('Terragrunt Language Server: Initialization complete');
 });
 
 connection.onDefinition((params: TextDocumentPositionParams): Definition | null => {
@@ -518,22 +556,21 @@ connection.onCompletion(
             }));
         }
 
-        // New completion logic for Terragrunt blocks and functions
         if (line.trim() === '' || line.trim().endsWith('{')) {
-            items = items.concat(validBlocks.map(block => ({
+            items = items.concat(Object.keys(validBlocks).map(block => ({
                 label: block,
                 kind: CompletionItemKind.Keyword,
                 detail: `Terragrunt ${block} block`,
-                documentation: `Create a ${block} block in your Terragrunt configuration.`
+                documentation: validBlocks[block].description
             })));
         }
 
         if (line.includes('${')) {
-            items = items.concat(terragruntFunctions.map(func => ({
+            items = items.concat(Object.keys(terragruntFunctions).map(func => ({
                 label: func,
                 kind: CompletionItemKind.Function,
                 detail: `Terragrunt ${func} function`,
-                documentation: `Use the ${func} function in your Terragrunt configuration.`
+                documentation: terragruntFunctions[func].description
             })));
         }
 
@@ -707,8 +744,6 @@ connection.onDocumentLinks(
     }
 );
 
-
-// Implement hover provider
 connection.onHover((params: TextDocumentPositionParams): Hover | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;
@@ -717,20 +752,20 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
     const position = params.position;
     const word = getWordAtPosition(text, position);
 
-    if (validBlocks.includes(word)) {
+    if (word in validBlocks) {
         return {
             contents: {
                 kind: 'markdown',
-                value: `**${word}** is a Terragrunt block used for ${getBlockDescription(word)}.`
+                value: `**${word}** is a Terragrunt block used for ${validBlocks[word].description}.`
             }
         };
     }
 
-    if (terragruntFunctions.includes(word)) {
+    if (word in terragruntFunctions) {
         return {
             contents: {
                 kind: 'markdown',
-                value: `**${word}** is a Terragrunt function used for ${getFunctionDescription(word)}.`
+                value: `**${word}** is a Terragrunt function used for ${terragruntFunctions[word].description}.`
             }
         };
     }
@@ -738,7 +773,6 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
     return null;
 });
 
-// Implement signature help provider
 connection.onSignatureHelp((params: TextDocumentPositionParams): SignatureHelp | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;
@@ -748,15 +782,16 @@ connection.onSignatureHelp((params: TextDocumentPositionParams): SignatureHelp |
     const line = text.split('\n')[position.line];
     const functionMatch = line.match(/(\w+)\(/);
 
-    if (functionMatch && terragruntFunctions.includes(functionMatch[1])) {
+    if (functionMatch && functionMatch[1] in terragruntFunctions) {
         const functionName = functionMatch[1];
+        const funcDef = terragruntFunctions[functionName];
         return {
             signatures: [
                 SignatureInformation.create(
-                    `${functionName}(${getFunctionParameters(functionName).join(', ')})`,
-                    getFunctionDescription(functionName),
-                    ...getFunctionParameters(functionName).map(param => 
-                        ParameterInformation.create(param, getParameterDescription(functionName, param))
+                    `${functionName}(${funcDef.parameters.join(', ')})`,
+                    funcDef.description,
+                    ...funcDef.parameters.map(param => 
+                        ParameterInformation.create(param, funcDef.parameterDescriptions[param] || 'No description available')
                     )
                 )
             ],
@@ -780,59 +815,6 @@ function getWordAtPosition(text: string, position: Position): string {
     return wordBeforeStr + wordAfterStr;
 }
 
-function getBlockDescription(block: string): string {
-    // Implement this function to return descriptions for Terragrunt blocks
-    const descriptions: { [key: string]: string } = {
-        'terraform': 'defining Terraform configurations',
-        'include': 'including other Terragrunt configurations',
-        'locals': 'defining local variables',
-        'inputs': 'specifying input variables for Terraform',
-        'dependency': 'declaring dependencies on other Terragrunt configurations',
-        'generate': 'dynamically generating files',
-        'remote_state': 'configuring Terraform remote state',
-        // Add more descriptions as needed
-    };
-    return descriptions[block] || 'no description available';
-}
-
-function getFunctionDescription(func: string): string {
-    // Implement this function to return descriptions for Terragrunt functions
-    const descriptions: { [key: string]: string } = {
-        'get_env': 'retrieving environment variables',
-        'get_terraform_commands_that_need_vars': 'getting Terraform commands that require variables',
-        'path_relative_to_include': 'getting the path relative to the including configuration',
-        'find_in_parent_folders': 'finding files in parent folders',
-        // Add more descriptions as needed
-    };
-    return descriptions[func] || 'no description available';
-}
-
-function getFunctionParameters(func: string): string[] {
-    // Implement this function to return parameters for Terragrunt functions
-    const parameters: { [key: string]: string[] } = {
-        'get_env': ['ENV_VAR_NAME', 'DEFAULT_VALUE'],
-        'path_relative_to_include': [],
-        'find_in_parent_folders': ['FILENAME'],
-        // Add more function parameters as needed
-    };
-    return parameters[func] || [];
-}
-
-function getParameterDescription(func: string, param: string): string {
-    // Implement this function to return descriptions for function parameters
-    const descriptions: { [key: string]: { [key: string]: string } } = {
-        'get_env': {
-            'ENV_VAR_NAME': 'The name of the environment variable to retrieve',
-            'DEFAULT_VALUE': 'The default value to return if the environment variable is not set'
-        },
-        'find_in_parent_folders': {
-            'FILENAME': 'The name of the file to search for in parent folders'
-        },
-        // Add more parameter descriptions as needed
-    };
-    return descriptions[func]?.[param] || 'no description available';
-}
-
 function getActiveParameter(line: string, position: number): number {
     const funcCallMatch = line.slice(0, position).match(/\w+\s*\(/);
     if (!funcCallMatch) return 0;
@@ -841,8 +823,6 @@ function getActiveParameter(line: string, position: number): number {
     return commaCount;
 }
 
-// Make the text document manager listen on the connection
-// for open, change and close text document events
 documents.listen(connection);
 
 // Listen on the connection
