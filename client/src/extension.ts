@@ -1,8 +1,3 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-
 import * as path from 'path';
 import { workspace, ExtensionContext } from 'vscode';
 
@@ -16,30 +11,29 @@ import {
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-    // The server is implemented in node
     const serverModule = context.asAbsolutePath(
         path.join('server', 'out', 'server.js')
     );
 
-    // If the extension is launched in debug mode then the debug server options are used
-    // Otherwise the run options are used
     const serverOptions: ServerOptions = {
         run: { module: serverModule, transport: TransportKind.ipc },
         debug: {
             module: serverModule,
             transport: TransportKind.ipc,
+            options: { execArgv: ['--nolazy', '--inspect=6009'] }
         }
     };
 
-    // Options to control the language client
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'hcl' }],
+        documentSelector: [
+            { scheme: 'file', language: 'hcl' },
+            { scheme: 'file', language: 'terragrunt' }
+        ],
         synchronize: {
-            fileEvents: workspace.createFileSystemWatcher('**/*.hcl')
+            fileEvents: workspace.createFileSystemWatcher('**/*.{hcl,tfvars}')
         }
     };
 
-    // Create the language client and start the client.
     client = new LanguageClient(
         'terragruntHclLanguageServer',
         'Terragrunt HCL Language Server',
@@ -47,7 +41,6 @@ export function activate(context: ExtensionContext) {
         clientOptions
     );
 
-    // Start the client. This will also launch the server
     client.start();
 }
 

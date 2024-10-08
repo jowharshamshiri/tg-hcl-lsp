@@ -9,7 +9,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jowharshamshiri/vscode-terragrunt"
+		"url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
 	},
 	"dependencies": {
 		"vscode-languageserver": "^9.0.1",

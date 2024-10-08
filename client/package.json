@@ -6,26 +6,34 @@
 	"version": "0.0.1",
 	"publisher": "jowharshamshiri",
 	"repository": {
-		"type": "git",
-		"url": "https://github.com/jowharshamshiri/vscode-terragrunt"
+	  "type": "git",
+	  "url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
 	},
 	"engines": {
-		"vscode": "^1.75.0"
+	  "vscode": "^1.75.0"
 	},
 	"dependencies": {
-		"vscode-languageclient": "^9.0.1"
+	  "vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
-		"@types/vscode": "^1.75.1",
-		"@vscode/test-electron": "^2.3.9"
+	  "@types/vscode": "^1.75.1",
+	  "@vscode/test-electron": "^2.3.9"
 	},
-	"activationEvents": ["onLanguage:hcl"],
+	"activationEvents": [
+	  "onLanguage:hcl",
+	  "onLanguage:terragrunt"
+	],
 	"contributes": {
 	  "languages": [
 		{
 		  "id": "hcl",
 		  "extensions": [".hcl", ".tfvars"],
 		  "aliases": ["HCL", "Terragrunt"]
+		},
+		{
+		  "id": "terragrunt",
+		  "extensions": [".hcl", ".tfvars"],
+		  "aliases": ["Terragrunt", "HCL"]
 		}
 	  ],
 	  "configuration": {
@@ -37,8 +45,27 @@
 			"type": "number",
 			"default": 100,
 			"description": "Controls the maximum number of problems reported."
+		  },
+		  "terragruntLanguageServer.trace.server": {
+			"scope": "window",
+			"type": "string",
+			"enum": [
+			  "off",
+			  "messages",
+			  "verbose"
+			],
+			"default": "off",
+			"description": "Traces the communication between VS Code and the language server."
 		  }
 		}
 	  }
+	},
+	"main": "./out/extension.js",
+	"scripts": {
+	  "vscode:prepublish": "npm run compile",
+	  "compile": "tsc -p ./",
+	  "watch": "tsc -watch -p ./",
+	  "pretest": "npm run compile",
+	  "test": "node ./out/test/runTest.js"
 	}
   }

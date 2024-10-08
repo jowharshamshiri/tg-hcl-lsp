@@ -16,7 +16,11 @@ import {
     Range,
     Position,
     DocumentLink,
-    DocumentLinkParams
+    DocumentLinkParams,
+    Hover,
+    SignatureHelp,
+    SignatureInformation,
+    ParameterInformation
 } from 'vscode-languageserver/node';
 
 import {
@@ -25,8 +29,8 @@ import {
 
 import * as path from 'path';
 import * as fs from 'fs';
-
 import { URI } from 'vscode-uri';
+
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
 const connection = createConnection(ProposedFeatures.all);
@@ -35,77 +39,123 @@ const validBlocks = [
 	'generate', 'remote_state', 'terraform_version_constraint',
 	'terragrunt_version_constraint', 'download_dir', 'skip'
 ];
+const terragruntFunctions = [
+    'get_env', 'get_terraform_commands_that_need_vars', 'get_terraform_commands_that_need_input',
+    'get_terraform_commands_that_need_locking', 'get_terraform_commands_that_need_parallelism',
+    'get_parent_terragrunt_dir', 'path_relative_to_include', 'path_relative_from_include',
+    'find_in_parent_folders', 'get_terragrunt_dir', 'get_original_terragrunt_dir',
+    'get_terraform_command', 'get_aws_account_id', 'get_aws_caller_identity_arn',
+    'get_aws_caller_identity_user_id', 'get_terraform_cli_args', 'get_terraform_workspace',
+    'run_cmd', 'read_terragrunt_config', 'sops_decrypt_file'
+];
 
-// Create a simple text document manager.
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
-let hasConfigurationCapability = false;
-let hasWorkspaceFolderCapability = false;
-let hasDiagnosticRelatedInformationCapability = false;
+const hasConfigurationCapability = false;
+const hasWorkspaceFolderCapability = false;
+const hasDiagnosticRelatedInformationCapability = false;
 
 function parseTerragruntHCL(text: string): any {
-    // This is a simple parser. In a real-world scenario, you'd want to use a proper HCL parser.
     const blocks: any = {};
-    const regex = /(\w+)\s*{([^}]*)}/g;
+    const regex = /(\w+)\s*{/g;
+    const stack: any[] = [blocks];
     let match;
-    while ((match = regex.exec(text)) !== null) {
-        blocks[match[1]] = match[2].trim();
+    let lastIndex = 0;
+
+    try {
+        while ((match = regex.exec(text)) !== null) {
+            const blockName = match[1];
+            const blockStart = match.index + match[0].length;
+            let blockEnd = blockStart;
+            let nestLevel = 1;
+
+            for (let i = blockStart; i < text.length; i++) {
+                if (text[i] === '{') nestLevel++;
+                if (text[i] === '}') nestLevel--;
+                if (nestLevel === 0) {
+                    blockEnd = i;
+                    break;
+                }
+            }
+
+            if (nestLevel !== 0) {
+                throw new Error(`Unmatched brackets in block "${blockName}"`);
+            }
+
+            const blockContent = text.slice(blockStart, blockEnd).trim();
+            const currentLevel = stack[stack.length - 1];
+            currentLevel[blockName] = parseTerragruntHCL(blockContent);
+            stack.push(currentLevel[blockName]);
+
+            lastIndex = blockEnd + 1;
+        }
+
+        // Capture any remaining content as a special '__content__' property
+        if (lastIndex < text.length) {
+            const remainingContent = text.slice(lastIndex).trim();
+            if (remainingContent) {
+                stack[stack.length - 1]['__content__'] = remainingContent;
+            }
+        }
+
+        return blocks;
+    } catch (error) {
+        console.error('Error parsing Terragrunt HCL:', error);
+        return {}; // Return an empty object in case of parsing error
     }
-    return blocks;
 }
 
 function getTerraformVariables(sourcePath: string): string[] {
-    // This is a placeholder. In a real scenario, you'd parse the Terraform files.
-    return ['var1', 'var2', 'var3'];
-}
-
-connection.onInitialize((params: InitializeParams) => {
-    const capabilities = params.capabilities;
-
-    // Does the client support the `workspace/configuration` request?
-    // If not, we fall back using global settings.
-    hasConfigurationCapability = !!(
-        capabilities.workspace && !!capabilities.workspace.configuration
-    );
-    hasWorkspaceFolderCapability = !!(
-        capabilities.workspace && !!capabilities.workspace.workspaceFolders
-    );
-    hasDiagnosticRelatedInformationCapability = !!(
-        capabilities.textDocument &&
-        capabilities.textDocument.publishDiagnostics &&
-        capabilities.textDocument.publishDiagnostics.relatedInformation
-    );
-
-    const result: InitializeResult = {
-        capabilities: {
-            textDocumentSync: TextDocumentSyncKind.Incremental,
-            completionProvider: {
-                resolveProvider: true,
-                triggerCharacters: ['.', '=', '"']
-            },
-            definitionProvider: true,
-            documentLinkProvider: {
-                resolveProvider: true
-            },
-            diagnosticProvider: {
-                interFileDependencies: false,
-                workspaceDiagnostics: false
+    const variables: Set<string> = new Set();
+    
+    // Function to recursively search for .tf files
+    function searchTerraformFiles(dirPath: string) {
+        const files = fs.readdirSync(dirPath);
+        
+        for (const file of files) {
+            const filePath = path.join(dirPath, file);
+            const stat = fs.statSync(filePath);
+            
+            if (stat.isDirectory()) {
+                searchTerraformFiles(filePath);
+            } else if (path.extname(file) === '.tf') {
+                const content = fs.readFileSync(filePath, 'utf8');
+                extractVariables(content, variables);
             }
         }
-    };
-    if (hasWorkspaceFolderCapability) {
-        result.capabilities.workspace = {
-            workspaceFolders: {
-                supported: true
-            }
-        };
     }
-    return result;
-});
+    
+    // Function to extract variables from file content
+    function extractVariables(content: string, variables: Set<string>) {
+        const variableRegex = /variable\s+"([^"]+)"\s*{/g;
+        let match;
+        while ((match = variableRegex.exec(content)) !== null) {
+            variables.add(match[1]);
+        }
+    }
+    
+    try {
+        if (fs.existsSync(sourcePath)) {
+            const stat = fs.statSync(sourcePath);
+            if (stat.isDirectory()) {
+                searchTerraformFiles(sourcePath);
+            } else if (path.extname(sourcePath) === '.tf') {
+                const content = fs.readFileSync(sourcePath, 'utf8');
+                extractVariables(content, variables);
+            }
+        } else {
+            console.warn(`Source path does not exist: ${sourcePath}`);
+        }
+    } catch (error) {
+        console.error('Error parsing Terraform files:', error);
+    }
+    
+    return Array.from(variables);
+}
+
 
 connection.onInitialized(() => {
     if (hasConfigurationCapability) {
-        // Register for all configuration changes.
         connection.client.register(DidChangeConfigurationNotification.type, undefined);
     }
     if (hasWorkspaceFolderCapability) {
@@ -136,7 +186,6 @@ connection.onDefinition((params: TextDocumentPositionParams): Definition | null 
     return null;
 });
 
-// The example settings
 interface TgLspSettings {
     maxNumberOfProblems: number;
 }
@@ -149,16 +198,12 @@ const documentSettings: Map<string, Thenable<TgLspSettings>> = new Map();
 
 connection.onDidChangeConfiguration(change => {
     if (hasConfigurationCapability) {
-        // Reset all cached document settings
         documentSettings.clear();
     } else {
         globalSettings = <TgLspSettings>(
             (change.settings.languageServerExample || defaultSettings)
         );
     }
-    // Refresh the diagnostics since the `maxNumberOfProblems` could have changed.
-    // We could optimize things here and re-fetch the setting first can compare it
-    // to the existing setting, but this is out of scope for this example.
     connection.languages.diagnostics.refresh();
 });
 
@@ -188,19 +233,19 @@ connection.languages.diagnostics.on(async (params) => {
       return { kind: 'full', items: [] };
     }
   
-    const diagnostics = await validateTextDocument(document);
+    const diagnostics = await validateTerragruntHclDoc(document);
     return { kind: 'full', items: diagnostics };
-  });
+});
 
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
 documents.onDidChangeContent(change => {
-    validateTextDocument(change.document);
+    validateTerragruntHclDoc(change.document);
 });
 
-async function validateTextDocument(textDocument: TextDocument): Promise<Diagnostic[]> {
+async function validateTerragruntHclDoc(hclDocument: TextDocument): Promise<Diagnostic[]> {
     const diagnostics: Diagnostic[] = [];
-    const text = textDocument.getText();
+    const text = hclDocument.getText();
 
 	let inHeredoc = false;
     let heredocIdentifier = '';
@@ -378,7 +423,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
         while ((match = rule.pattern.exec(text)) !== null) {
             let message = rule.message;
             if (rule.validate) {
-                const validationMessage = rule.validate(match, text, textDocument.positionAt(match.index).line);
+                const validationMessage = rule.validate(match, text, hclDocument.positionAt(match.index).line);
                 if (validationMessage) {
                     message = validationMessage;
                 } else {
@@ -389,8 +434,8 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
             diagnostics.push({
                 severity: rule.severity,
                 range: {
-                    start: textDocument.positionAt(match.index),
-                    end: textDocument.positionAt(match.index + match[0].length)
+                    start: hclDocument.positionAt(match.index),
+                    end: hclDocument.positionAt(match.index + match[0].length)
                 },
                 message: message,
                 source: 'Terragrunt Validator'
@@ -402,33 +447,100 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
 }
 
 connection.onDidChangeWatchedFiles(_change => {
-    // Monitored files have change in VSCode
-    connection.console.log('We received a file change event');
+    
 });
 
-// This handler provides the initial list of the completion items.
 connection.onCompletion(
-    (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
-        // The pass parameter contains the position of the text document in
-        // which code complete got requested. For the example we ignore this
-        // info and always provide the same completion items.
-        return [
-            {
-                label: 'TypeScript',
-                kind: CompletionItemKind.Text,
-                data: 1
-            },
-            {
-                label: 'JavaScript',
-                kind: CompletionItemKind.Text,
-                data: 2
+    (params: TextDocumentPositionParams): CompletionItem[] => {
+        const document = documents.get(params.textDocument.uri);
+        if (!document) return [];
+
+        const text = document.getText();
+        const position = params.position;
+        const line = text.split('\n')[position.line];
+
+        let items: CompletionItem[] = [];
+
+        // Existing completion logic
+        if (line.includes('include') && line.includes('path')) {
+            const documentPath = path.dirname(params.textDocument.uri);
+            const directories = fs.readdirSync(documentPath, { withFileTypes: true })
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+
+            items = directories.map(dir => ({
+                label: dir,
+                kind: CompletionItemKind.Folder
+            }));
+        }
+
+        if (line.includes('dependency') && line.includes('outputs')) {
+            items = ['output1', 'output2', 'output3'].map(output => ({
+                label: output,
+                kind: CompletionItemKind.Value
+            }));
+        }
+
+        if (line.includes('dependency') && line.includes('config_path')) {
+            const documentPath = path.dirname(params.textDocument.uri);
+            const directories = fs.readdirSync(documentPath, { withFileTypes: true })
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+
+            items = directories.map(dir => ({
+                label: dir,
+                kind: CompletionItemKind.Folder
+            }));
+        }
+
+        if (line.includes('inputs')) {
+            const blocks = parseTerragruntHCL(text);
+            if (blocks.terraform && blocks.terraform.includes('source')) {
+                const sourceMatch = blocks.terraform.match(/source\s*=\s*"([^"]*)"/);
+                if (sourceMatch) {
+                    const sourcePath = sourceMatch[1];
+                    const variables = getTerraformVariables(sourcePath);
+                    items = variables.map(variable => ({
+                        label: variable,
+                        kind: CompletionItemKind.Variable
+                    }));
+                }
             }
-        ];
+        }
+
+        if (line.includes('remote_state') || line.includes('generate')) {
+            const remoteStateKeys = ['backend', 'config', 'generate'];
+            const generateKeys = ['path', 'if_exists', 'contents'];
+
+            items = [...remoteStateKeys, ...generateKeys].map(key => ({
+                label: key,
+                kind: CompletionItemKind.Keyword
+            }));
+        }
+
+        // New completion logic for Terragrunt blocks and functions
+        if (line.trim() === '' || line.trim().endsWith('{')) {
+            items = items.concat(validBlocks.map(block => ({
+                label: block,
+                kind: CompletionItemKind.Keyword,
+                detail: `Terragrunt ${block} block`,
+                documentation: `Create a ${block} block in your Terragrunt configuration.`
+            })));
+        }
+
+        if (line.includes('${')) {
+            items = items.concat(terragruntFunctions.map(func => ({
+                label: func,
+                kind: CompletionItemKind.Function,
+                detail: `Terragrunt ${func} function`,
+                documentation: `Use the ${func} function in your Terragrunt configuration.`
+            })));
+        }
+
+        return items;
     }
 );
 
-// This handler resolves additional information for the item selected in
-// the completion list.
 connection.onCompletionResolve(
     (item: CompletionItem): CompletionItem => {
         if (item.data === 1) {
@@ -594,6 +706,141 @@ connection.onDocumentLinks(
         return links;
     }
 );
+
+
+// Implement hover provider
+connection.onHover((params: TextDocumentPositionParams): Hover | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const text = document.getText();
+    const position = params.position;
+    const word = getWordAtPosition(text, position);
+
+    if (validBlocks.includes(word)) {
+        return {
+            contents: {
+                kind: 'markdown',
+                value: `**${word}** is a Terragrunt block used for ${getBlockDescription(word)}.`
+            }
+        };
+    }
+
+    if (terragruntFunctions.includes(word)) {
+        return {
+            contents: {
+                kind: 'markdown',
+                value: `**${word}** is a Terragrunt function used for ${getFunctionDescription(word)}.`
+            }
+        };
+    }
+
+    return null;
+});
+
+// Implement signature help provider
+connection.onSignatureHelp((params: TextDocumentPositionParams): SignatureHelp | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const text = document.getText();
+    const position = params.position;
+    const line = text.split('\n')[position.line];
+    const functionMatch = line.match(/(\w+)\(/);
+
+    if (functionMatch && terragruntFunctions.includes(functionMatch[1])) {
+        const functionName = functionMatch[1];
+        return {
+            signatures: [
+                SignatureInformation.create(
+                    `${functionName}(${getFunctionParameters(functionName).join(', ')})`,
+                    getFunctionDescription(functionName),
+                    ...getFunctionParameters(functionName).map(param => 
+                        ParameterInformation.create(param, getParameterDescription(functionName, param))
+                    )
+                )
+            ],
+            activeSignature: 0,
+            activeParameter: getActiveParameter(line, position.character)
+        };
+    }
+
+    return null;
+});
+
+// Helper functions (implement these based on your needs)
+function getWordAtPosition(text: string, position: Position): string {
+    const line = text.split('\n')[position.line];
+    const beforeCursor = line.slice(0, position.character);
+    const after = line.slice(position.character);
+    const wordBefore = beforeCursor.match(/[A-Za-z0-9_-]+$/);
+    const wordAfter = after.match(/^[A-Za-z0-9_-]+/);
+    const wordBeforeStr = wordBefore ? wordBefore[0] : '';
+    const wordAfterStr = wordAfter ? wordAfter[0] : '';
+    return wordBeforeStr + wordAfterStr;
+}
+
+function getBlockDescription(block: string): string {
+    // Implement this function to return descriptions for Terragrunt blocks
+    const descriptions: { [key: string]: string } = {
+        'terraform': 'defining Terraform configurations',
+        'include': 'including other Terragrunt configurations',
+        'locals': 'defining local variables',
+        'inputs': 'specifying input variables for Terraform',
+        'dependency': 'declaring dependencies on other Terragrunt configurations',
+        'generate': 'dynamically generating files',
+        'remote_state': 'configuring Terraform remote state',
+        // Add more descriptions as needed
+    };
+    return descriptions[block] || 'no description available';
+}
+
+function getFunctionDescription(func: string): string {
+    // Implement this function to return descriptions for Terragrunt functions
+    const descriptions: { [key: string]: string } = {
+        'get_env': 'retrieving environment variables',
+        'get_terraform_commands_that_need_vars': 'getting Terraform commands that require variables',
+        'path_relative_to_include': 'getting the path relative to the including configuration',
+        'find_in_parent_folders': 'finding files in parent folders',
+        // Add more descriptions as needed
+    };
+    return descriptions[func] || 'no description available';
+}
+
+function getFunctionParameters(func: string): string[] {
+    // Implement this function to return parameters for Terragrunt functions
+    const parameters: { [key: string]: string[] } = {
+        'get_env': ['ENV_VAR_NAME', 'DEFAULT_VALUE'],
+        'path_relative_to_include': [],
+        'find_in_parent_folders': ['FILENAME'],
+        // Add more function parameters as needed
+    };
+    return parameters[func] || [];
+}
+
+function getParameterDescription(func: string, param: string): string {
+    // Implement this function to return descriptions for function parameters
+    const descriptions: { [key: string]: { [key: string]: string } } = {
+        'get_env': {
+            'ENV_VAR_NAME': 'The name of the environment variable to retrieve',
+            'DEFAULT_VALUE': 'The default value to return if the environment variable is not set'
+        },
+        'find_in_parent_folders': {
+            'FILENAME': 'The name of the file to search for in parent folders'
+        },
+        // Add more parameter descriptions as needed
+    };
+    return descriptions[func]?.[param] || 'no description available';
+}
+
+function getActiveParameter(line: string, position: number): number {
+    const funcCallMatch = line.slice(0, position).match(/\w+\s*\(/);
+    if (!funcCallMatch) return 0;
+    
+    const commaCount = line.slice(funcCallMatch.index, position).split(',').length - 1;
+    return commaCount;
+}
+
 // Make the text document manager listen on the connection
 // for open, change and close text document events
 documents.listen(connection);
