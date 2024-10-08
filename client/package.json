@@ -1,0 +1,44 @@
+{
+	"name": "hcl-lsp-client",
+	"description": "VSCode extension for Terragrunt HCL language support",
+	"author": "Bahram Shamshiri",
+	"license": "MIT",
+	"version": "0.0.1",
+	"publisher": "jowharshamshiri",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jowharshamshiri/vscode-terragrunt"
+	},
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^9.0.1"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.75.1",
+		"@vscode/test-electron": "^2.3.9"
+	},
+	"activationEvents": ["onLanguage:hcl"],
+	"contributes": {
+	  "languages": [
+		{
+		  "id": "hcl",
+		  "extensions": [".hcl", ".tfvars"],
+		  "aliases": ["HCL", "Terragrunt"]
+		}
+	  ],
+	  "configuration": {
+		"type": "object",
+		"title": "Terragrunt Language Server",
+		"properties": {
+		  "terragruntLanguageServer.maxNumberOfProblems": {
+			"scope": "resource",
+			"type": "number",
+			"default": 100,
+			"description": "Controls the maximum number of problems reported."
+		  }
+		}
+	  }
+	}
+  }
