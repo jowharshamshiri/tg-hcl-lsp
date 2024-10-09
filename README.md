@@ -14,11 +14,6 @@ Language Server Protocol (LSP) server for Terragrunt HCL files. It provides feat
 - Reject terraform blocks(module, variable, etc...) in hcl files.
 - Some suggestions for remote state and generate blocks and others(WIP)
 
-## Prerequisites
-
-- Node.js (version 12 or higher)
-- npm (usually comes with Node.js)
-
 ## Installation
 
 1. Clone this repository:
