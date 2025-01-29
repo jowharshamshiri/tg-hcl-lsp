@@ -1,0 +1,61 @@
+{
+	"comments": {
+	  "lineComment": "#",
+	  "blockComment": ["/*", "*/"]
+	},
+	"brackets": [
+	  ["{", "}"],
+	  ["[", "]"],
+	  ["(", ")"]
+	],
+	"autoClosingPairs": [
+	  { "open": "{", "close": "}" },
+	  { "open": "[", "close": "]" },
+	  { "open": "(", "close": ")" },
+	  { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
+	  { "open": "'", "close": "'", "notIn": ["string", "comment"] },
+	  { "open": "${", "close": "}" }
+	],
+	"surroundingPairs": [
+	  ["{", "}"],
+	  ["[", "]"],
+	  ["(", ")"],
+	  ["\"", "\""],
+	  ["'", "'"],
+	  ["${", "}"]
+	],
+	"indentationRules": {
+	  "increaseIndentPattern": "^.*(\\{[^}\"'\\/]*|\\([^)\"'\\/]*|\\[[^\\]\"'\\/]*)$|^\\s*\\b(terraform|resource|data|module|provider|variable|output|locals|dependency|include|generate|remote_state)\\b\\s*\\S+\\s*\"[^\"]*\"\\s*$)",
+	  "decreaseIndentPattern": "^\\s*(\\}|\\]|\\)|\\bend\\b)"
+	},
+	"onEnterRules": [
+	  {
+		"beforeText": "^\\s*#.*",
+		"action": { "indent": "none", "appendText": "# " }
+	  },
+	  {
+		"beforeText": "^\\s*\\b(?:terraform|resource|data|module|provider|variable|output|locals|dependency|include|generate|remote_state)\\b\\s+.*\\{\\s*$",
+		"action": { "indent": "increase" }
+	  },
+	  {
+		"beforeText": "^\\s*\\}",
+		"action": { "indent": "decrease" }
+	  },
+	  {
+		"beforeText": "<<(\\w+)",
+		"afterText": "^\\1$",
+		"action": {
+		  "indent": "none",
+		  "appendText": "\n  ",
+		  "removeText": 0
+		}
+	  }
+	],
+	"wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)",
+	"folding": {
+	  "markers": {
+		"start": "^\\s*\\/\\*\\*?\\s*#region",
+		"end": "^\\s*\\/\\*\\*?\\s*#endregion"
+	  }
+	}
+  }

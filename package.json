@@ -21,6 +21,25 @@
 	],
 	"main": "./client/out/extension",
 	"contributes": {
+		"grammars": [{
+			"language": "terragrunt",
+			"scopeName": "source.hcl",
+			"path": "./terragrunt.tmLanguage.json"
+		}],
+		"languages": [
+			{
+				"id": "terragrunt",
+				"extensions": [
+					".hcl",
+					".tfvars"
+				],
+				"configuration": "./language-configuration.json",
+				"aliases": [
+					"Terragrunt",
+					"HCL"
+				]
+			}
+		],
 		"configuration": {
 			"type": "object",
 			"title": "Terragrunt HCL Language Server",

@@ -1,0 +1,127 @@
+{
+	"name": "Terragrunt",
+	"scopeName": "source.hcl",
+	"patterns": [
+		{
+			"include": "#comments"
+		},
+		{
+			"include": "#blocks"
+		},
+		{
+			"include": "#variables"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#attributes"
+		},
+		{
+			"include": "#user_defined_variables"
+		},
+		{
+			"include": "#functions"
+		},
+		{
+			"include": "#heredocs"
+		}
+	],
+	"repository": {
+		"attributes": {
+			"patterns": [
+				{
+					"match": "\\b(path|instance_suffix|site_type|site_name|kubeconfig_file|commands|execute|config_path|paths|config|generate|before_hook|after_hook|backend|config|if_exists|contents)\\b(?=\\s*=)(?<!(?:locals|inputs|dependency)\\s*=\\s*{[^}]*)",
+					"name": "support.type.property-name.hcl"
+				}
+			]
+		},
+		"comments": {
+			"patterns": [
+				{
+					"match": "#.*$",
+					"name": "comment.line.number-sign.hcl"
+				},
+				{
+					"begin": "/\\*",
+					"end": "\\*/",
+					"name": "comment.block.hcl"
+				}
+			]
+		},
+		"blocks": {
+			"patterns": [
+				{
+					"match": "\\b(terraform|retryable_errors|extra_arguments|include|dependency|dependencies|locals|inputs|remote_state|generate|before_hook|after_hook)\\b",
+					"name": "keyword.control.hcl"
+				}
+			]
+		},
+		"variables": {
+			"patterns": [
+				{
+					"match": "\\$\\{[^\\}]*\\}",
+					"name": "variable.other.hcl"
+				}
+			]
+		},
+		"strings": {
+			"patterns": [
+				{
+					"name": "string.quoted.double.hcl",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.hcl",
+							"match": "\\\\."
+						}
+					]
+				}
+			]
+		},
+		"user_defined_variables": {
+			"patterns": [
+				{
+					"match": "(?<=(?:locals|inputs|dependency)\\s*=\\s*\\{)[^\\}]*\\b([a-zA-Z_][a-zA-Z0-9_-]*)\\b(?=\\s*=)",
+					"name": "variable.other.user-defined.hcl"
+				}
+			]
+		},
+		"functions": {
+			"patterns": [
+				{
+					"match": "\\b(merge|length|keys|values|lookup|element|split|join|replace|trim|upper|lower|format|formatlist|file|jsonencode|jsondecode|yamlencode|yamldecode|base64encode|base64decode|dirname|pathexpand|abspath|basename|regex|regexall|timestamp|timeadd|uuid|coalesce|coalescelist|flatten|setintersection|setunion|setproduct|alltrue|anytrue|can|try|range|ceil|floor|log|max|min|parseint|pow|signum|chomp|indent|title|zipmap|get_terraform_commands_that_need_vars|find_in_parent_folders|path_relative_to_include)\\b(?=\\()",
+					"name": "support.function.hcl"
+				}
+			]
+		},
+		"heredocs": {
+			"patterns": [
+				{
+					"name": "string.quoted.heredoc.hcl",
+					"begin": "<<-?([a-zA-Z_][a-zA-Z0-9_-]*)",
+					"beginCaptures": {
+						"0": {
+							"name": "punctuation.definition.heredoc.begin.hcl"
+						}
+					},
+					"end": "\\1",
+					"endCaptures": {
+						"0": {
+							"name": "punctuation.definition.heredoc.end.hcl"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#variables"
+						},
+						{
+							"include": "#functions"
+						}
+					]
+				}
+			]
+		}
+	}
+}
