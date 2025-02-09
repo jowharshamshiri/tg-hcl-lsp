@@ -4,15 +4,33 @@ Language Server Protocol (LSP) server for Terragrunt HCL files. It provides feat
 
 ## Features
 
-- Valid top-level block declarations.
-- Generate and follow link for dependency blocks with relative paths(open the implicit terragrunt.hcl)
-- Recognize Heredocs in generate blocks and ignore the content.
-- Checking for invalid content outside blocks.
-- Number of and type of args after block name(one mandatory string arg for generate and dependecy, an optional string arg for include)
-- Mandatory path attribute for include blocks.
-- Warning on non-git terraform source paths.
-- Reject terraform blocks(module, variable, etc...) in hcl files.
-- Some suggestions for remote state and generate blocks and others(WIP)
+### Syntax Highlighting and Validation
+
+- Real-time error detection and diagnostics as you type
+- Incremental document parsing for better performance
+
+### IntelliSense
+
+- Context-aware code completions
+- Trigger completions automatically after typing '.', '=', or space
+- Hover information for detailed documentation and type information
+
+### Document Management
+
+- Full support for document lifecycle (open, change, close)
+- Maintains parsed document state for quick access
+- Workspace-aware language support
+
+### Error Reporting
+
+- Detailed diagnostic messages for syntax and semantic errors
+- Real-time error updates as you edit
+
+### Performance
+
+- Incremental text document synchronization
+- Efficient caching of parsed documents
+- Optimized for large files and frequent updates
 
 ## Installation
 
@@ -34,33 +52,12 @@ Language Server Protocol (LSP) server for Terragrunt HCL files. It provides feat
    npm install
    ```
 
-## Usage
-
-### As a standalone server
-
-1. Build the project:
+4. Build the VS Code extension:
 
    ```
-   npm run build
+   npm run compile
+   code .
    ```
-
-2. Start the language server:
-
-   ```
-   npm start
-   ```
-
-### Integration with Visual Studio Code
-
-1. Build the VS Code extension:
-
-   ```
-   npm run build:vscode
-   ```
-
-2. Copy the built extension to your VS Code extensions folder.
-
-3. Restart VS Code and open a folder containing Terragrunt HCL files.
 
 ## Contributing
 
@@ -72,5 +69,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- This project is built using the [VSCode Language Server Node example](https://github.com/Microsoft/vscode-extension-samples/tree/master/lsp-sample) as a starting point.
 - Thanks to the Terragrunt community for inspiration and use cases.
