@@ -3,21 +3,20 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"type": "extensionHost",
-			"request": "launch",
-			"name": "Launch Client",
-			"runtimeExecutable": "${execPath}",
-			"args": ["--extensionDevelopmentPath=${workspaceRoot}"],
-			"outFiles": [
-				"${workspaceRoot}/client/out/**/*.js",
-				"${workspaceRoot}/server/out/**/*.js"
-			],
-			"autoAttachChildProcesses": true,
-			// "preLaunchTask": {
-			// 	"type": "npm",
-			// 	"script": "watch"
-			// }
-		},
+            "type": "extensionHost",
+            "request": "launch",
+            "name": "Launch Client",
+            "runtimeExecutable": "${execPath}",
+            "args": [
+                "--disable-extensions",
+                "--extensionDevelopmentPath=${workspaceRoot}",
+                "--enable-proposed-api=jowharshamshiri.hcl-lsp"
+            ],
+            "autoAttachChildProcesses": true,
+            "sourceMaps": true,
+            "outFiles": ["${workspaceRoot}/client/out/**/*.js"],
+            "preLaunchTask": "npm: watch"
+        },
 		{
 			"name": "Language Server E2E Test",
 			"type": "extensionHost",
