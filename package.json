@@ -21,6 +21,7 @@
 		"onLanguage:terragrunt"
 	],
 	"main": "./client/out/extension",
+	"icon": "./icon.png",
 	"contributes": {
 		"grammars": [
 			{
@@ -90,6 +91,6 @@
 		"typescript-eslint": "^8.16.0"
 	},
 	"dependencies": {
-		"tghclparser": "^0.1.2"
+		"tghclparser": "0.1.5"
 	}
 }

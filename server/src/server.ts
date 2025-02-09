@@ -30,19 +30,19 @@ let workspaceFolder: string | null;
 
 // Handle document opening
 documents.onDidOpen((event) => {
-    connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document opened: ${event.document.uri}`);
+    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document opened: ${event.document.uri}`);
     handleDocumentChange(event);
 });
 
 // Handle document changes
 documents.onDidChangeContent((event) => {
-    connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document changed: ${event.document.uri}`);
+    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document changed: ${event.document.uri}`);
     handleDocumentChange(event);
 });
 
 // Handle document closing
 documents.onDidClose((event) => {
-    connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document closed: ${event.document.uri}`);
+    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document closed: ${event.document.uri}`);
     parsedDocuments.delete(event.document.uri);
 });
 
@@ -67,7 +67,7 @@ function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>) {
 
 connection.onInitialize((params: InitializeParams) => {
     workspaceFolder = params.rootUri;
-    connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Started and initialize received`);
+    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Started and initialize received`);
 
     // Parse all currently open documents
     documents.all().forEach(document => {
@@ -142,7 +142,7 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
             return [];
         }
 
-        connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Completion result: ${result.length} items`);
+        // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Completion result: ${result.length} items`);
         return result;
     } catch (error) {
         connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error while providing completions: ${error}`);
