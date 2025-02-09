@@ -12,7 +12,9 @@
 	"publisher": "bahramjoharshamshiri",
 	"categories": [],
 	"keywords": [
-		"terragrunt", "hcl", "lsp"
+		"terragrunt",
+		"hcl",
+		"lsp"
 	],
 	"engines": {
 		"vscode": "^1.52.0"
@@ -43,36 +45,7 @@
 					"HCL"
 				]
 			}
-		],
-		"configuration": {
-			"type": "object",
-			"title": "Terragrunt LSP Configuration",
-			"properties": {
-				"tg-hcl-lsp.enable": {
-					"scope": "resource",
-					"type": "boolean",
-					"default": true,
-					"description": "Controls the enablement."
-				},
-				"tg-hcl-lsp.options": {
-					"scope": "resource",
-					"type": "object",
-					"default": {},
-					"description": "Additional options."
-				},
-				"tg-hcl-lsp.trace.server": {
-					"scope": "window",
-					"type": "string",
-					"enum": [
-						"off",
-						"messages",
-						"verbose"
-					],
-					"default": "on",
-					"description": "Traces the communication between VSCode and the language server."
-				}
-			}
-		}
+		]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
@@ -91,6 +64,6 @@
 		"typescript-eslint": "^8.16.0"
 	},
 	"dependencies": {
-		"tghclparser": "0.1.5"
+		"tghclparser": "0.1.6"
 	}
 }
