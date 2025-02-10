@@ -64,6 +64,6 @@
 		"typescript-eslint": "^8.16.0"
 	},
 	"dependencies": {
-		"tghclparser": "0.1.6"
+		"tghclparser": "0.1.7"
 	}
 }
