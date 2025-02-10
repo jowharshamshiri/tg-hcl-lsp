@@ -5,13 +5,15 @@ import {
     TextDocumentSyncKind,
     CompletionItem,
     TextDocumentChangeEvent,
-    InitializeParams
+    InitializeParams,
+    DocumentLink
 } from 'vscode-languageserver/node';
+import { URI } from 'vscode-uri';
 
 import {
     TextDocument
 } from 'vscode-languageserver-textdocument';
-import { HoverProvider, CompletionsProvider, DiagnosticsProvider, ParsedDocument } from 'tghclparser';
+import { HoverProvider, CompletionsProvider, DiagnosticsProvider, ParsedDocument, Workspace, Token } from 'tghclparser';
 
 // Creates the LSP connection
 const connection = createConnection(ProposedFeatures.all);
@@ -19,8 +21,8 @@ const connection = createConnection(ProposedFeatures.all);
 // Create a manager for open text documents
 const documents = new TextDocuments(TextDocument);
 
-// Listen to the connection
-documents.listen(connection);
+// Create a workspace instance
+const workspace = new Workspace();
 
 // Store parsed documents by URI
 const parsedDocuments = new Map<string, ParsedDocument>();
@@ -28,31 +30,16 @@ const parsedDocuments = new Map<string, ParsedDocument>();
 // The workspace folder this server is operating on
 let workspaceFolder: string | null;
 
-// Handle document opening
-documents.onDidOpen((event) => {
-    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document opened: ${event.document.uri}`);
-    handleDocumentChange(event);
-});
-
-// Handle document changes
-documents.onDidChangeContent((event) => {
-    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document changed: ${event.document.uri}`);
-    handleDocumentChange(event);
-});
-
-// Handle document closing
-documents.onDidClose((event) => {
-    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Document closed: ${event.document.uri}`);
-    parsedDocuments.delete(event.document.uri);
-});
-
-function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>) {
+async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>) {
     try {
         const document = event.document;
-        const parsedDocument = new ParsedDocument(document.uri, document.getText());
+        const parsedDocument = new ParsedDocument(workspace, document.uri, document.getText());
         parsedDocuments.set(document.uri, parsedDocument);
 
-        // Send diagnostics
+        // Add the document to workspace to process dependencies
+        await workspace.addDocument(parsedDocument);
+
+        // Send diagnostics after dependencies are processed
         const diagnostics = parsedDocument.getDiagnostics();
         connection.sendDiagnostics({
             uri: document.uri,
@@ -67,26 +54,9 @@ function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>) {
 
 connection.onInitialize((params: InitializeParams) => {
     workspaceFolder = params.rootUri;
-    // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Started and initialize received`);
-
-    // Parse all currently open documents
-    documents.all().forEach(document => {
-        try {
-            const parsedDocument = new ParsedDocument(document.uri, document.getText());
-            parsedDocuments.set(document.uri, parsedDocument);
-            
-            // Send initial diagnostics
-            const diagnostics = parsedDocument.getDiagnostics();
-            connection.sendDiagnostics({
-                uri: document.uri,
-                diagnostics
-            });
-        } catch (error) {
-            connection.console.error(
-                `[Server(${process.pid}) ${workspaceFolder}] Error parsing document during initialization: ${error}`
-            );
-        }
-    });
+    if (workspaceFolder) {
+        workspace.setWorkspaceRoot(workspaceFolder);
+    }
 
     return {
         capabilities: {
@@ -98,6 +68,9 @@ connection.onInitialize((params: InitializeParams) => {
             completionProvider: {
                 resolveProvider: false,
                 triggerCharacters: ['.', '=', ' ']
+            },
+            documentLinkProvider: {
+                resolveProvider: true
             }
         }
     };
@@ -116,6 +89,10 @@ connection.onHover((params) => {
         }
 
         const hoverResult = parsedDocument.getHoverInfo(params.position);
+        if (!hoverResult) {
+            return null;
+        }
+
         return {
             contents: hoverResult.content
         };
@@ -142,7 +119,6 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
             return [];
         }
 
-        // connection.console.log(`[Server(${process.pid}) ${workspaceFolder}] Completion result: ${result.length} items`);
         return result;
     } catch (error) {
         connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error while providing completions: ${error}`);
@@ -150,4 +126,67 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     }
 });
 
+// Document link provider
+connection.onDocumentLinks((params) => {
+    try {
+        const document = documents.get(params.textDocument.uri);
+        if (!document) {
+            return null;
+        }
+
+        const parsedDocument = parsedDocuments.get(document.uri);
+        if (!parsedDocument) {
+            return null;
+        }
+
+        // Get all dependency blocks
+        const links: DocumentLink[] = [];
+        const tokens = parsedDocument.getTokens();
+        
+        const findConfigPaths = (token: Token) => {
+            if (token.type === 'string_lit' && 
+                token.parent?.type === 'attribute' && 
+                token.parent.value === 'config_path' &&
+                token.parent.parent?.type === 'block' &&
+                (token.parent.parent.value === 'dependency' || token.parent.parent.value === 'dependencies')) {
+                
+                const targetPath = workspace.resolveDependencyPath(token.value as string, URI.parse(document.uri).fsPath);
+                const targetUri = URI.file(targetPath).toString();
+
+                links.push({
+                    range: {
+                        start: token.startPosition,
+                        end: token.endPosition
+                    },
+                    target: targetUri
+                });
+            }
+
+            // Recursively process children
+            token.children.forEach(findConfigPaths);
+        };
+
+        tokens.forEach(findConfigPaths);
+        return links;
+    } catch (error) {
+        connection.console.error(`Error providing document links: ${error}`);
+        return null;
+    }
+});
+
+// Handle document events
+documents.onDidOpen(async (event) => {
+    await handleDocumentChange(event);
+});
+
+documents.onDidChangeContent(async (event) => {
+    await handleDocumentChange(event);
+});
+
+documents.onDidClose((event) => {
+    parsedDocuments.delete(event.document.uri);
+});
+
+// Listen on the documents and connection
+documents.listen(connection);
 connection.listen();
