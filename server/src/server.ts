@@ -13,6 +13,7 @@ import {
 } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 
+import * as path from 'path';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
@@ -45,164 +46,167 @@ async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>
 		connection.console.error(
 			`[Server(${process.pid}) ${workspaceFolder}] Error handling document change: ${error}`
 		);
+		//print stack trace
+		console.log('Stack trace:', error.stack);
+
 	}
 }
 
 connection.onInitialize((params: InitializeParams) => {
-    workspaceFolder = params.rootUri;
-    if (workspaceFolder) {
-        workspace.setWorkspaceRoot(workspaceFolder);
-    }
+	workspaceFolder = params.rootUri;
+	if (workspaceFolder) {
+		workspace.setWorkspaceRoot(workspaceFolder);
+	}
 
-    return {
-        capabilities: {
-            textDocumentSync: {
-                openClose: true,
-                change: TextDocumentSyncKind.Incremental
-            },
-            hoverProvider: true,
-            completionProvider: {
-                resolveProvider: false,
-                triggerCharacters: ['.', '=', ' ']
-            },
-            documentLinkProvider: {
-                resolveProvider: true
-            },
-            executeCommandProvider: {
-                commands: ['terragrunt.evaluateFunction']
-            },
-            codeLensProvider: {
-                resolveProvider: false
-            },
-            // codeActionProvider: {
-            //     codeActionKinds: [CodeActionKind.QuickFix]
-            // }
-        }
-    };
+	return {
+		capabilities: {
+			textDocumentSync: {
+				openClose: true,
+				change: TextDocumentSyncKind.Incremental
+			},
+			hoverProvider: true,
+			completionProvider: {
+				resolveProvider: false,
+				triggerCharacters: ['.', '=', ' ']
+			},
+			documentLinkProvider: {
+				resolveProvider: true
+			},
+			executeCommandProvider: {
+				commands: ['terragrunt.evaluateFunction']
+			},
+			codeLensProvider: {
+				resolveProvider: false
+			},
+			// codeActionProvider: {
+			//     codeActionKinds: [CodeActionKind.QuickFix]
+			// }
+		}
+	};
 });
 
 connection.onCodeLens(async (params) => {
-    try {
-        const document = documents.get(params.textDocument.uri);
-        if (!document) return [];
+	try {
+		const document = documents.get(params.textDocument.uri);
+		if (!document) return [];
 
-        const parsedDocument = parsedDocuments.get(document.uri);
-        if (!parsedDocument) return [];
+		const parsedDocument = parsedDocuments.get(document.uri);
+		if (!parsedDocument) return [];
 
-        const codeLenses = [];
-        const tokens = parsedDocument.getTokens();
+		const codeLenses = [];
+		const tokens = parsedDocument.getTokens();
 
-        // Recursive function to traverse token tree
-        function findFunctionCalls(token: Token) {
-            if (token.type === 'function_call') {
-                codeLenses.push({
-                    range: {
-                        start: token.location.start,
-                        end: token.location.end
-                    },
-                    command: {
+		// Recursive function to traverse token tree
+		function findFunctionCalls(token: Token) {
+			if (token.type === 'function_call') {
+				codeLenses.push({
+					range: {
+						start: token.location.start,
+						end: token.location.end
+					},
+					command: {
 						title: `▶ ${token.value}`,
-                        command: 'terragrunt.evaluateFunction',
-                        arguments: [{
-                            function: token.value,
-                            uri: document.uri,
-                            position: token.location.start
-                        }]
-                    }
-                });
-            }
+						command: 'terragrunt.evaluateFunction',
+						arguments: [{
+							function: token.value,
+							uri: document.uri,
+							position: token.location.start
+						}]
+					}
+				});
+			}
 
-            // Recursively process all children
-            if (token.children && token.children.length > 0) {
-                token.children.forEach(child => findFunctionCalls(child));
-            }
-        }
+			// Recursively process all children
+			if (token.children && token.children.length > 0) {
+				token.children.forEach(child => findFunctionCalls(child));
+			}
+		}
 
-        // Process all top-level tokens
-        tokens.forEach(token => findFunctionCalls(token));
-        
-        return codeLenses;
-    } catch (error) {
-        connection.console.error(`Error providing code lenses: ${error}`);
-        console.log('Stack trace:', error.stack);
-        return [];
-    }
+		// Process all top-level tokens
+		tokens.forEach(token => findFunctionCalls(token));
+
+		return codeLenses;
+	} catch (error) {
+		connection.console.error(`Error providing code lenses: ${error}`);
+		console.log('Stack trace:', error.stack);
+		return [];
+	}
 });
 
 connection.onExecuteCommand(async (params) => {
-    if (params.command === 'terragrunt.evaluateFunction') {
-        try {
-            console.log('Evaluating function:', params);
-            const args = params.arguments?.[0] || {};
-            const { function: funcName, uri, position } = args;
+	if (params.command === 'terragrunt.evaluateFunction') {
+		try {
+			console.log('Evaluating function:', params);
+			const args = params.arguments?.[0] || {};
+			const { function: funcName, uri, position } = args;
 
-            const document = documents.get(uri);
-            if (!document) {
-                console.log('Document not found:', uri);
-                return null;
-            }
+			const document = documents.get(uri);
+			if (!document) {
+				console.log('Document not found:', uri);
+				return null;
+			}
 
-            const parsedDocument = parsedDocuments.get(uri);
-            if (!parsedDocument) {
-                console.log('Parsed document not found:', uri);
-                return null;
-            }
+			const parsedDocument = parsedDocuments.get(uri);
+			if (!parsedDocument) {
+				console.log('Parsed document not found:', uri);
+				return null;
+			}
 
-            // Find the function call token at the position
-            const token = parsedDocument.findTokenAtPosition(position);
-            if (!token) {
-                console.log('Token not found at position:', position);
-                return null;
-            }
+			// Find the function call token at the position
+			const token = parsedDocument.findTokenAtPosition(position);
+			if (!token) {
+				console.log('Token not found at position:', position);
+				return null;
+			}
 
-            // Find the function call - either the token itself or its parent
-            const functionCall = token.type === 'function_call' ? token : 
-                               token.children?.find(child => child.type === 'function_call');
-            
-            if (!functionCall || functionCall.type !== 'function_call') {
-                console.log('Function call not found for token:', token);
-                return null;
-            }
+			// Find the function call - either the token itself or its parent
+			const functionCall = token.type === 'function_call' ? token :
+				token.children?.find(child => child.type === 'function_call');
 
-            // Evaluate function with its arguments
-            const result = await parsedDocument.evaluateValue(functionCall);
+			if (!functionCall || functionCall.type !== 'function_call') {
+				console.log('Function call not found for token:', token);
+				return null;
+			}
+
+			// Evaluate function with its arguments
+			const result = await parsedDocument.evaluateValue(functionCall);
 			console.log('Function evaluation result:', result);
 
-            // Send the result back as a notification that the client can display
-            connection.sendNotification('terragrunt/functionEvaluation', {
-                function: funcName,
-                result: result ? JSON.stringify(result, null, 2) : 'Unable to evaluate function'
-            });
+			// Send the result back as a notification that the client can display
+			connection.sendNotification('terragrunt/functionEvaluation', {
+				function: funcName,
+				result: result ? result.value : 'Unable to evaluate function'
+			});
 
-        } catch (error) {
-            connection.console.error(`Error evaluating function: ${error}`);
-            console.log('Stack trace:', error.stack);
-            connection.sendNotification('terragrunt/functionEvaluation', {
-                function: params.arguments?.[0]?.function || 'unknown',
-                result: `Error: ${error instanceof Error ? error.message : String(error)}`
-            });
-        }
-    }
+		} catch (error) {
+			connection.console.error(`Error evaluating function: ${error}`);
+			console.log('Stack trace:', error.stack);
+			connection.sendNotification('terragrunt/functionEvaluation', {
+				function: params.arguments?.[0]?.function || 'unknown',
+				result: `Error: ${error instanceof Error ? error.message : String(error)}`
+			});
+		}
+	}
 });
 
 connection.onHover(async (params) => {
-    try {
-        const document = documents.get(params.textDocument.uri);
-        if (!document) {
-            return null;
-        }
+	try {
+		const document = documents.get(params.textDocument.uri);
+		if (!document) {
+			return null;
+		}
 
-        const parsedDocument = parsedDocuments.get(document.uri);
-        if (!parsedDocument) {
-            return null;
-        }
+		const parsedDocument = parsedDocuments.get(document.uri);
+		if (!parsedDocument) {
+			return null;
+		}
 
-        const hoverResult = await parsedDocument.getHoverInfo(params.position);
-        if (!hoverResult || !hoverResult.value) {
-            return null;
-        }
+		const hoverResult = await parsedDocument.getHoverInfo(params.position);
+		if (!hoverResult || !hoverResult.value) {
+			return null;
+		}
 
-		
+
 		return {
 			contents: {
 				kind: MarkupKind.Markdown,
@@ -211,11 +215,11 @@ connection.onHover(async (params) => {
 			// range: hoverResult.range
 		};
 
-    } catch (error) {
-        connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error while providing hover: ${error}`);
-        console.log('Stack trace:', error.stack);
-        return null;
-    }
+	} catch (error) {
+		connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error while providing hover: ${error}`);
+		console.log('Stack trace:', error.stack);
+		return null;
+	}
 });
 
 connection.onCompletion(async (params): Promise<CompletionItem[]> => {
@@ -260,24 +264,50 @@ connection.onDocumentLinks((params) => {
 		const tokens = parsedDocument.getTokens();
 
 		const findConfigPaths = (token: Token) => {
-			if (token.type === 'string_lit' &&
-				token.parent?.type === 'attribute' &&
-				token.parent.value === 'config_path' &&
-				token.parent.parent?.type === 'block' &&
-				(token.parent.parent.value === 'dependency' || token.parent.parent.value === 'dependencies')) {
+			if (token.type === 'string_lit') {
+				// token.parent?.type === 'attribute' &&
+				// token.parent.value === 'config_path' &&
+				// token.parent.parent?.type === 'block' &&
+				// (token.parent.parent.value === 'dependency' || token.parent.parent.value === 'dependencies')) 
+				if (token.parent?.type === 'attribute') {
+					// Handle single dependency path
+					if (token.parent.value === 'config_path' &&
+						token.parent.parent?.type === 'block' &&
+						token.parent.parent.value === 'dependency') {
 
-				const targetPath = workspace.resolveDependencyPath(token.value as string, URI.parse(document.uri).fsPath);
-				const targetUri = URI.file(targetPath).toString();
+						const targetPath = workspace.resolveDependencyPath(token.value as string, URI.parse(document.uri).fsPath);
+						const targetUri = URI.file(targetPath + '/terragrunt.hcl').toString();
 
-				links.push({
-					range: {
-						start: token.startPosition,
-						end: token.endPosition
-					},
-					target: targetUri
-				});
+						links.push({
+							range: {
+								start: token.startPosition,
+								end: token.endPosition
+							},
+							target: targetUri
+						});
+					}
+				}
 			}
+			if (token.type === 'array_lit') {
+				// Handle paths array in dependencies block
+				if (token.parent.value === 'paths' &&
+					token.parent.parent?.type === 'block' &&
+					token.parent.parent.value === 'dependencies') {
 
+					for (const child of token.children) {
+						const targetPath = workspace.resolveDependencyPath(child.value as string, URI.parse(document.uri).fsPath);
+						const targetUri = URI.file(targetPath + '/terragrunt.hcl').toString();
+
+						links.push({
+							range: {
+								start: child.startPosition,
+								end: child.endPosition
+							},
+							target: targetUri
+						});
+					}
+				}
+			}
 			// Recursively process children
 			token.children.forEach(findConfigPaths);
 		};
