@@ -1,26 +1,31 @@
 # Terragrunt HCL Language Server
 
-Language Server Protocol (LSP) server for Terragrunt HCL files. It provides features for Terragrunt configuration files in Visual Studio Code. Install it from vscode [marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp&ssr=false#review-details) or search "Terragrunt Language Server" in vscode extensions panel.
+Language Server Protocol (LSP) server for Terragrunt HCL files providing convenience features for Terragrunt configuration files in Visual Studio Code. Install it from vscode [marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp&ssr=false#review-details) or search "Terragrunt Language Server" in vscode extensions panel.
+
+This extension is under active development and new features are being added regularly. Please report any issues or feature requests in the [GitHub repository](https://github.com/jowharshamshiri/tg-hcl-lsp/issues). 🚀🚀🚀
 
 ## Features
 
 ### Terragrunt.hcl Dependency Tree
 
-- Visualize the dependency tree of Terragrunt configuration files
+Visualize the dependency tree of Terragrunt configuration files 🚀
 ![Dependency Tree](images/dependency-tree.png)
+Right-click in the editor and select "Show Terragrunt Dependency Tree" to view the dependency tree of the workspace.
 
 ### Syntax Highlighting and Validation
 
 - Real-time error detection and diagnostics as you type
 - Incremental document parsing for better performance
+- Syntax highlighting for Terragrunt configuration files
+- Document links for easy navigation
 
 ### IntelliSense
 
 - Context-aware code completions
 - Trigger completions automatically after typing '.', '=', or space
-- Hover information for detailed documentation and type information
-- Locals and variables completions
-- Dependency completions from terraform outputs
+- Hover information for detailed documentation and type information with examples
+- Locals and variables completions 🚀
+- Output variables completions based on terraform state 🚀
 
 ### Document Management
 
@@ -76,4 +81,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Thanks to the Terragrunt community for inspiration and use cases.
+- Thanks to the Terragrunt community for inspiration and use cases. Special thanks to rtizzy on github for reminding me to build this extension. Also thanks to and-win, gsouf, lucalooz, jonath92 for filing issues and feature requests.
