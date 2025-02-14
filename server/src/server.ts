@@ -266,23 +266,25 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 });
 
 // Document link provider
-connection.onDocumentLinks((params) => {
-	try {
-		const document = documents.get(params.textDocument.uri);
-		if (!document) {
-			return null;
-		}
+connection.onDocumentLinks(async (params) => {
+    try {
+        const document = documents.get(params.textDocument.uri);
+        if (!document) {
+            return null;
+        }
 
-		const parsedDocument = parsedDocuments.get(document.uri);
-		if (!parsedDocument) {
-			return null;
-		}
+        const parsedDocument = parsedDocuments.get(document.uri);
+        if (!parsedDocument) {
+            return null;
+        }
 
-		return parsedDocument.getLinks();
-	} catch (error) {
-		connection.console.error(`Error providing document links: ${error}`);
-		return null;
-	}
+        const links = await parsedDocument.getLinks();
+		console.log('Links:', links);
+        return links;
+    } catch (error) {
+        connection.console.error(`Error providing document links: ${error}`);
+        return null;
+    }
 });
 
 // Handle document events
