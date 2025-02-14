@@ -75,9 +75,9 @@ connection.onInitialize((params: InitializeParams) => {
 			executeCommandProvider: {
 				commands: ['terragrunt.evaluateFunction', 'terragrunt.dependencyTree']
 			},
-			codeLensProvider: {
-				resolveProvider: false
-			},
+			// codeLensProvider: {
+			// 	resolveProvider: false
+			// },
 			// codeActionProvider: {
 			//     codeActionKinds: [CodeActionKind.QuickFix]
 			// }
@@ -225,7 +225,6 @@ connection.onHover(async (params) => {
 			return null;
 		}
 
-
 		return {
 			contents: {
 				kind: MarkupKind.Markdown,
@@ -279,7 +278,7 @@ connection.onDocumentLinks(async (params) => {
         }
 
         const links = await parsedDocument.getLinks();
-		console.log('Links:', links);
+		// console.log('Links:', links);
         return links;
     } catch (error) {
         connection.console.error(`Error providing document links: ${error}`);
