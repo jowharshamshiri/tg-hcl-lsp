@@ -6,6 +6,7 @@ import {
 import {
 	LanguageClient, LanguageClientOptions, TransportKind
 } from 'vscode-languageclient/node';
+import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 
 let defaultClient: LanguageClient;
 const clients = new Map<string, LanguageClient>();
@@ -93,7 +94,7 @@ export function activate(context: ExtensionContext) {
 				createClientOptions(outputChannel)
 			);
 			defaultClient.start();
-			setupClientHandlers(defaultClient);
+			setupClientHandlers(defaultClient, context);
 			return;
 		}
 
@@ -116,7 +117,7 @@ export function activate(context: ExtensionContext) {
 				createClientOptions(outputChannel, folder)
 			);
 			client.start();
-			setupClientHandlers(client);
+			setupClientHandlers(client, context);
 			clients.set(folder.uri.toString(), client);
 		}
 	}
@@ -145,15 +146,59 @@ export function deactivate(): Thenable<void> {
 	return Promise.all(promises).then(() => undefined);
 }
 
-function setupClientHandlers(client: LanguageClient) {
-	client.onReady().then(() => {
-		console.log('Setting up client notification handlers');
+function setupClientHandlers(client: LanguageClient, context: ExtensionContext) {
+    client.onReady().then(() => {
+        console.log('Setting up client notification handlers');
 
-		client.onNotification('terragrunt/functionEvaluation', (params: { function: string, result: string }) => {
-			console.log('Received function evaluation notification:', params);
-			Window.showInformationMessage(`${params.function}: ${params.result}`);
-		});
-	}).catch(err => {
-		console.error('Failed to setup client handlers:', err);
-	});
+        client.onNotification('terragrunt/functionEvaluation', (params: { function: string, result: string }) => {
+            console.log('Received function evaluation notification:', params);
+            Window.showInformationMessage(`${params.function}: ${params.result}`);
+        });
+
+        client.onNotification('terragrunt/dependencyTreeResult', (params: { result: string }) => {
+            // Create or show the webview
+            DependencyTreeViewProvider.createOrShow(context.extensionUri);
+
+            // Convert the tree string to a hierarchical object
+            const treeData = convertTreeStringToHierarchy(params.result);
+
+            // Update the webview with the tree data
+            if (DependencyTreeViewProvider.currentPanel) {
+                DependencyTreeViewProvider.currentPanel.updateTreeData(treeData);
+            }
+        });
+    }).catch(err => {
+        console.error('Failed to setup client handlers:', err);
+    });
+}
+
+// Helper function to convert tree string to hierarchy
+function convertTreeStringToHierarchy(treeString: string) {
+    const lines = treeString.split('\n');
+    const root: any = { name: '', type: '', children: [] };
+    const stack: any[] = [{ node: root, depth: -1 }];
+
+    lines.forEach(line => {
+        if (!line.trim()) return;
+
+        const depth = (line.match(/│   |    /g) || []).length;
+        const name = line.match(/\[(\w+)\] (.+)$/);
+        
+        if (name) {
+            const node = {
+                name: name[2],
+                type: name[1].toLowerCase(),
+                children: []
+            };
+
+            while (stack.length > 1 && stack[stack.length - 1].depth >= depth) {
+                stack.pop();
+            }
+
+            stack[stack.length - 1].node.children.push(node);
+            stack.push({ node, depth });
+        }
+    });
+
+    return root.children[0];  // Return the actual root node
 }
