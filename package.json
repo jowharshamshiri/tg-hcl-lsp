@@ -1,70 +1,112 @@
 {
-	"name": "hcl-lsp",
-	"displayName": "Terragrunt Language Server",
-	"description": "VSCode extension for Terragrunt HCL language support",
-	"author": "Bahram Shamshiri",
-	"license": "MIT",
-	"version": "0.1.6",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
-	},
-	"publisher": "bahramjoharshamshiri",
-	"categories": [],
-	"keywords": [
-		"terragrunt",
-		"hcl",
-		"lsp"
-	],
-	"engines": {
-		"vscode": "^1.52.0"
-	},
-	"activationEvents": [
-		"onLanguage:terragrunt"
-	],
-	"main": "./client/out/extension",
-	"icon": "./icon.png",
-	"contributes": {
-		"grammars": [
+    "name": "hcl-lsp",
+    "displayName": "Terragrunt Language Server",
+    "description": "VSCode extension for Terragrunt HCL language support",
+    "author": "Bahram Shamshiri",
+    "license": "MIT",
+    "version": "0.2.1",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
+    },
+    "publisher": "bahramjoharshamshiri",
+    "categories": [],
+    "keywords": [
+        "terragrunt",
+        "hcl",
+        "lsp"
+    ],
+    "engines": {
+        "vscode": "^1.52.0"
+    },
+    "activationEvents": [
+        "onLanguage:terragrunt"
+    ],
+    "main": "./client/out/extension",
+    "icon": "./icon.png",
+    "contributes": {
+        "commands": [
+            {
+                "command": "terragrunt.evaluateFunction",
+                "title": "Evaluate Terragrunt Function",
+                "enableCommandUris": true
+            },
 			{
-				"language": "terragrunt",
-				"scopeName": "source.hcl",
-				"path": "./terragrunt.tmLanguage.json"
-			}
-		],
-		"languages": [
-			{
-				"id": "terragrunt",
-				"extensions": [
-					".hcl",
-					".tfvars"
-				],
-				"configuration": "./language-configuration.json",
-				"aliases": [
-					"Terragrunt",
-					"HCL"
-				]
-			}
-		]
-	},
-	"scripts": {
-		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -b",
-		"watch": "tsc -b -w",
-		"lint": "eslint",
-		"postinstall": "cd client && npm install && cd ../server && npm install && cd .."
-	},
-	"devDependencies": {
-		"@eslint/js": "^9.13.0",
-		"@stylistic/eslint-plugin": "^2.9.0",
-		"@types/mocha": "^5.2.0",
-		"@types/node": "^20",
-		"eslint": "^9.13.0",
-		"typescript": "^5.7.2",
-		"typescript-eslint": "^8.16.0"
-	},
-	"dependencies": {
-		"tghclparser": "0.2.0",
-		"vscode-uri": "^3.1.0"
-	}
+                "command": "terragrunt.dependencyTree",
+                "title": "Show Terragrunt Dependency Tree",
+                "enableCommandUris": true
+            }
+        ],
+        "menus": {
+            "editor/context": [
+				{
+					"command": "terragrunt.dependencyTree",
+					"when": "editorLangId == terragrunt",
+					"group": "terragrunt@2"
+				}
+            ],
+            "commandPalette": [
+                {
+                    "command": "terragrunt.evaluateFunction",
+                    "when": "editorLangId == terragrunt"
+                },
+				{
+					"command": "terragrunt.dependencyTree",
+					"when": "editorLangId == terragrunt"
+				}
+            ]
+        },
+        "configuration": {
+            "type": "object",
+            "title": "Terragrunt Language Server",
+            "properties": {
+                "terragrunt.codeLens.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable/disable code lens for function evaluation"
+                }
+            }
+        },
+        "grammars": [
+            {
+                "language": "terragrunt",
+                "scopeName": "source.hcl",
+                "path": "./terragrunt.tmLanguage.json"
+            }
+        ],
+        "languages": [
+            {
+                "id": "terragrunt",
+                "extensions": [
+                    ".hcl",
+                    ".tfvars"
+                ],
+                "configuration": "./language-configuration.json",
+                "aliases": [
+                    "Terragrunt",
+                    "HCL"
+                ]
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -b",
+        "watch": "tsc -b -w",
+        "lint": "eslint",
+        "postinstall": "cd client && npm install && cd ../server && npm install && cd .."
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.13.0",
+        "@stylistic/eslint-plugin": "^2.9.0",
+        "@types/mocha": "^5.2.0",
+        "@types/node": "^20",
+        "eslint": "^9.13.0",
+        "typescript": "^5.7.2",
+        "typescript-eslint": "^8.16.0"
+    },
+    "dependencies": {
+        "tghclparser": "0.3.5",
+        "vscode-uri": "^3.1.0"
+    }
 }
