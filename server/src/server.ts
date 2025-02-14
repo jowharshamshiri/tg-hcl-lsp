@@ -267,77 +267,22 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 
 // Document link provider
 connection.onDocumentLinks((params) => {
-	// try {
-	// 	const document = documents.get(params.textDocument.uri);
-	// 	if (!document) {
-	// 		return null;
-	// 	}
+	try {
+		const document = documents.get(params.textDocument.uri);
+		if (!document) {
+			return null;
+		}
 
-	// 	const parsedDocument = parsedDocuments.get(document.uri);
-	// 	if (!parsedDocument) {
-	// 		return null;
-	// 	}
+		const parsedDocument = parsedDocuments.get(document.uri);
+		if (!parsedDocument) {
+			return null;
+		}
 
-	// 	// Get all dependency blocks
-	// 	const links: DocumentLink[] = [];
-	// 	const tokens = parsedDocument.getTokens();
-
-	// 	const findConfigPaths = (token: Token) => {
-	// 		if (token.type === 'string_lit') {
-	// 			// token.parent?.type === 'attribute' &&
-	// 			// token.parent.value === 'config_path' &&
-	// 			// token.parent.parent?.type === 'block' &&
-	// 			// (token.parent.parent.value === 'dependency' || token.parent.parent.value === 'dependencies')) 
-	// 			if (token.parent?.type === 'attribute') {
-	// 				// Handle single dependency path
-	// 				if (token.parent.value === 'config_path' &&
-	// 					token.parent.parent?.type === 'block' &&
-	// 					token.parent.parent.value === 'dependency') {
-
-	// 					const targetPath = workspace.resolveDependencyPath(token, URI.parse(document.uri).fsPath);
-	// 					const targetUri = URI.file(targetPath + '/terragrunt.hcl').toString();
-
-	// 					links.push({
-	// 						range: {
-	// 							start: token.startPosition,
-	// 							end: token.endPosition
-	// 						},
-	// 						target: targetUri
-	// 					});
-	// 				}
-	// 			}
-	// 		}
-	// 		if (token.type === 'array_lit') {
-	// 			// Handle paths array in dependencies block
-	// 			if (token.parent.value === 'paths' &&
-	// 				token.parent.parent?.type === 'block' &&
-	// 				token.parent.parent.value === 'dependencies') {
-
-	// 				for (const child of token.children) {
-	// 					const targetPath = workspace.resolveDependencyPath(child, URI.parse(document.uri).fsPath);
-	// 					const targetUri = URI.file(targetPath + '/terragrunt.hcl').toString();
-
-	// 					links.push({
-	// 						range: {
-	// 							start: child.startPosition,
-	// 							end: child.endPosition
-	// 						},
-	// 						target: targetUri
-	// 					});
-	// 				}
-	// 			}
-	// 		}
-	// 		// Recursively process children
-	// 		token.children.forEach(findConfigPaths);
-	// 	};
-
-	// 	tokens.forEach(findConfigPaths);
-	// 	return links;
-	// } catch (error) {
-	// 	connection.console.error(`Error providing document links: ${error}`);
-	// 	return null;
-	// }
-	return [];
+		return parsedDocument.getLinks();
+	} catch (error) {
+		connection.console.error(`Error providing document links: ${error}`);
+		return null;
+	}
 });
 
 // Handle document events
