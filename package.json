@@ -30,21 +30,30 @@
                 "command": "terragrunt.evaluateFunction",
                 "title": "Evaluate Terragrunt Function",
                 "enableCommandUris": true
+            },
+			{
+                "command": "terragrunt.dependencyTree",
+                "title": "Show Terragrunt Dependency Tree",
+                "enableCommandUris": true
             }
         ],
         "menus": {
             "editor/context": [
-                {
-                    "command": "terragrunt.evaluateFunction",
-                    "when": "editorLangId == terragrunt",
-                    "group": "terragrunt@1"
-                }
+				{
+					"command": "terragrunt.dependencyTree",
+					"when": "editorLangId == terragrunt",
+					"group": "terragrunt@2"
+				}
             ],
             "commandPalette": [
                 {
                     "command": "terragrunt.evaluateFunction",
                     "when": "editorLangId == terragrunt"
-                }
+                },
+				{
+					"command": "terragrunt.dependencyTree",
+					"when": "editorLangId == terragrunt"
+				}
             ]
         },
         "configuration": {
