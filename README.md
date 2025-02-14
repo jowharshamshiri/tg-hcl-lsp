@@ -4,6 +4,11 @@ Language Server Protocol (LSP) server for Terragrunt HCL files. It provides feat
 
 ## Features
 
+### Terragrunt.hcl Dependency Tree
+
+- Visualize the dependency tree of Terragrunt configuration files
+![Dependency Tree](images/dependency-tree.png)
+
 ### Syntax Highlighting and Validation
 
 - Real-time error detection and diagnostics as you type
@@ -14,6 +19,8 @@ Language Server Protocol (LSP) server for Terragrunt HCL files. It provides feat
 - Context-aware code completions
 - Trigger completions automatically after typing '.', '=', or space
 - Hover information for detailed documentation and type information
+- Locals and variables completions
+- Dependency completions from terraform outputs
 
 ### Document Management
 

@@ -71,7 +71,7 @@ function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFol
 }
 
 export function activate(context: ExtensionContext) {
-	const module = context.asAbsolutePath(path.join('server', 'out', 'server.js'));
+	let module = context.asAbsolutePath(path.join('dist', 'server', 'server.js'));
 	const outputChannel: OutputChannel = Window.createOutputChannel('tg-hcl-lsp');
 
 	function didOpenTextDocument(document: TextDocument): void {

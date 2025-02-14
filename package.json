@@ -22,7 +22,7 @@
     "activationEvents": [
         "onLanguage:terragrunt"
     ],
-    "main": "./client/out/extension",
+    "main": "./dist/extension.js",
     "icon": "./icon.png",
     "contributes": {
         "commands": [
@@ -31,7 +31,7 @@
                 "title": "Evaluate Terragrunt Function",
                 "enableCommandUris": true
             },
-			{
+            {
                 "command": "terragrunt.dependencyTree",
                 "title": "Show Terragrunt Dependency Tree",
                 "enableCommandUris": true
@@ -39,21 +39,21 @@
         ],
         "menus": {
             "editor/context": [
-				{
-					"command": "terragrunt.dependencyTree",
-					"when": "editorLangId == terragrunt",
-					"group": "terragrunt@2"
-				}
+                {
+                    "command": "terragrunt.dependencyTree",
+                    "when": "editorLangId == terragrunt",
+                    "group": "terragrunt@2"
+                }
             ],
             "commandPalette": [
                 {
                     "command": "terragrunt.evaluateFunction",
                     "when": "editorLangId == terragrunt"
                 },
-				{
-					"command": "terragrunt.dependencyTree",
-					"when": "editorLangId == terragrunt"
-				}
+                {
+                    "command": "terragrunt.dependencyTree",
+                    "when": "editorLangId == terragrunt"
+                }
             ]
         },
         "configuration": {
@@ -90,9 +90,10 @@
         ]
     },
     "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "tsc -b",
-        "watch": "tsc -b -w",
+        "vscode:prepublish": "npm run webpack:prod",
+        "webpack:prod": "webpack --mode production",
+        "webpack:dev": "webpack --mode development",
+        "watch": "webpack --mode development --watch",
         "lint": "eslint",
         "postinstall": "cd client && npm install && cd ../server && npm install && cd .."
     },
@@ -101,9 +102,13 @@
         "@stylistic/eslint-plugin": "^2.9.0",
         "@types/mocha": "^5.2.0",
         "@types/node": "^20",
+        "copy-webpack-plugin": "^12.0.2",
         "eslint": "^9.13.0",
-        "typescript": "^5.7.2",
-        "typescript-eslint": "^8.16.0"
+        "ts-loader": "^9.5.2",
+        "typescript": "^5.7.3",
+        "typescript-eslint": "^8.16.0",
+        "webpack": "^5.98.0",
+        "webpack-cli": "^6.0.1"
     },
     "dependencies": {
         "tghclparser": "0.3.5",
