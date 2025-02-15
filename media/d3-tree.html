@@ -13,6 +13,7 @@
             color: var(--vscode-editor-foreground);
             overflow-y: auto;
             overflow-x: hidden;
+            position: relative;
         }
 
         text {
@@ -20,16 +21,40 @@
             fill: var(--vscode-editor-foreground);
         }
 
-        text:hover {
+        .node-text {
+            cursor: default;
+        }
+
+        .node-text.clickable {
             cursor: pointer;
+        }
+
+        .node-text.clickable:hover {
             text-decoration: underline;
+        }
+
+        .output-node {
+            fill: #2a9d8f !important;
+        }
+
+        .expand-collapse {
+            cursor: pointer;
+            font-size: 10px;
+        }
+
+        .file-link {
+            fill: #6c757d;
+            cursor: pointer;
+        }
+
+        .file-link:hover {
+            fill: #495057;
         }
 
         circle {
             stroke-width: 1.5px;
         }
 
-        /* Ensure SVG takes full width but allows scrolling */
         svg {
             display: block;
             margin: 0 auto;
@@ -37,7 +62,47 @@
             height: auto !important;
         }
 
-        /* Error message styling */
+        .controls {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            gap: 12px;
+            background: var(--vscode-editor-background);
+            padding: 8px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .control-button {
+            padding: 6px 12px;
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            min-width: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: 0.3px;
+            opacity: 0.9;
+        }
+
+        .control-button:hover {
+            background: var(--vscode-button-hoverBackground);
+            opacity: 1;
+            transform: translateY(-1px);
+        }
+
+        .control-button:active {
+            transform: translateY(0);
+        }
+
         #error-message {
             display: flex;
             flex-direction: column;
@@ -71,6 +136,10 @@
     </style>
 </head>
 <body>
+    <div class="controls">
+        <button class="control-button" onclick="expandAll()">Expand All</button>
+        <button class="control-button" onclick="collapseAll()">Collapse All</button>
+    </div>
     <script>
         const vscode = acquireVsCodeApi();
     </script>

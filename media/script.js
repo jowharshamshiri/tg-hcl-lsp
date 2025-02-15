@@ -1,114 +1,166 @@
-// script.js
 let nodeData = null;
 
-function visualizeTree(data) {
+function expandAll() {
+	if (!nodeData) return;
+	
+	function expand(node) {
+		if (node._children) {
+			node.children = node._children;
+			node._children = null;
+			node.expanded = true;
+			node.children.forEach(expand);
+		}
+		if (node.children) {
+			node.children.forEach(expand);
+		}
+	}
+	
+	expand(nodeData);
+	visualizeTree(nodeData);
+}
+
+function collapseAll() {
+	if (!nodeData) return;
+	
+	function collapse(node) {
+		if (node.children) {
+			node._children = node.children;
+			node.children = null;
+			node.expanded = false;
+			node._children.forEach(collapse);
+		}
+	}
+	
+	// Don't collapse the root node
+	if (nodeData.children) {
+		nodeData.children.forEach(collapse);
+	}
+	visualizeTree(nodeData);
+}
+
+function visualizeTree(data) { 
     // Clear any existing SVG and error messages
-    d3.select("svg").remove();
+    d3.select("svg").remove(); 
     d3.select("#error-message").remove();
-    
-    // Handle undefined or null data
     if (!data) {
         displayError("No dependency tree data available. The tree might be empty or there could be an error in the configuration.");
         return;
     }
-
-    // Handle empty tree (no nodes)
     if (!data.name) {
         displayError("The dependency tree is empty. Check your Terragrunt configuration files.");
         return;
     }
-
     nodeData = data;
-
+    
     const nodeSize = 17;
+    const maxLabelLength = 70;
+    
     const root = d3.hierarchy(data)
-        .eachBefore((i => d => d.index = i++)(0));
-    const nodes = root.descendants();
+        .eachBefore(((i) => d => d.index = i++)(0));
+	
+	// Filter out output nodes without children
+	const nodes = root.descendants()
+        .filter(d => !(d.data.type.startsWith('output') && (!d.data.children && !d.data._children)));
+    
     const width = window.innerWidth;
     const height = (nodes.length + 1) * nodeSize;
-
-    // Define columns for additional information
-    const columns = [
-        {
-            label: "Dependencies",
-            value: d => d.children ? d.children.length : 0,
-            format: value => value.toString(),
-            x: width - 200
-        },
-        {
-            label: "Type",
-            value: d => d.data.type || "-",
-            format: value => value,
-            x: width - 100
-        }
-    ];
-
-    // Create SVG
+    
+    // Determine if node is expandable
+    const isExpandable = (d) => {
+        return d.data.type === 'include' || 
+               d.data.type === 'dependency' || 
+               (d.data.type.startsWith('output') && (d.data.children || d.data._children));
+    };
+    
     const svg = d3.select("body")
         .append("svg")
         .attr("width", width)
         .attr("height", height)
         .attr("viewBox", [-nodeSize / 2, -nodeSize * 3 / 2, width, height])
         .attr("style", "max-width: 100%; height: auto; font: 12px sans-serif; overflow: visible;");
-
+    
     // Create links
-    const link = svg.append("g")
+    svg.append("g")
         .attr("fill", "none")
         .attr("stroke", "var(--vscode-editor-foreground)")
         .attr("stroke-opacity", 0.4)
         .selectAll()
-        .data(root.links())
+        .data(root.links().filter(d => nodes.includes(d.target)))
         .join("path")
         .attr("d", d => `
             M${d.source.depth * nodeSize},${d.source.index * nodeSize}
             V${d.target.index * nodeSize}
             h${nodeSize}
         `);
-
+    
     // Create nodes
     const node = svg.append("g")
         .selectAll()
         .data(nodes)
         .join("g")
         .attr("transform", d => `translate(0,${d.index * nodeSize})`);
+    
+    // Node circles with plus/minus signs
+    const nodeGroup = node.append("g")
+        .attr("transform", d => `translate(${d.depth * nodeSize}, 0)`);
 
-    // Add circles for nodes
-    node.append("circle")
-        .attr("cx", d => d.depth * nodeSize)
-        .attr("r", 2.5)
-        .attr("fill", d => d.children ? "var(--vscode-editor-background)" : "var(--vscode-editor-foreground)")
+    nodeGroup.append("circle")
+        .attr("r", 3.5)
+        .attr("fill", d => ((d.children && d.children.length > 0 && d.expanded) || (d.data._children && d.data._children.length > 0 && !d.expanded)) ?
+		 "var(--vscode-editor-foreground)" : "var(--vscode-editor-background)")
         .attr("stroke", "var(--vscode-editor-foreground)");
 
-    // Add main text labels
-    node.append("text")
+    // Main text labels
+    const labelGroup = node.append("g")
+        .attr("transform", d => `translate(${d.depth * nodeSize + 6}, 0)`);
+		labelGroup.append("text")
+		.attr("class", d => {
+			const classes = ["node-text"];
+			if (isExpandable(d)) classes.push("clickable");
+			if (d.data.type.startsWith('output')) classes.push("output-node");
+			return classes.join(" ");
+		})
+		.attr("dy", "0.32em")
+		.text(d => {
+			const name = d.data.name;
+			if (!d.data.type.startsWith('output')) {
+				// Find this node's position among its parent's non-output children
+				const siblings = d.parent ? d.parent.children : [d];
+				const nonOutputSiblings = siblings.filter(node => !node.data.type.startsWith('output'));
+				const index = nonOutputSiblings.indexOf(d) + 1;
+				return `${index}. ${name.length > maxLabelLength ? name.slice(0, maxLabelLength) + "..." : name}`;
+			}
+			return name.length > maxLabelLength ? name.slice(0, maxLabelLength) + "..." : name;
+		})
+		.on("click", (event, d) => {
+			if (isExpandable(d)) {
+				handleNodeClick(event, d);
+			}
+		});
+
+    // Add "open file" link only for non-output nodes
+    labelGroup.append("text")
+        .attr("class", "file-link")
         .attr("dy", "0.32em")
-        .attr("x", d => d.depth * nodeSize + 6)
-        .attr("fill", "var(--vscode-editor-foreground)")
-        .text(d => d.data.name)
-        .on("click", (event, d) => handleNodeClick(event, d));
-
-    // Add tooltips
+        .attr("x", d => {
+            const truncatedLength = Math.min(d.data.name.length, maxLabelLength);
+            return truncatedLength * 6 + 10;
+        })
+        .style("display", d => d.data.type.startsWith('output') ? "none" : null)
+        .text("↗")
+        .on("click", (event, d) => {
+            event.stopPropagation();
+            vscode.postMessage({
+                type: 'openFile',
+                path: d.data.name
+            });
+        });
+    
+    // Tooltips for full path
     node.append("title")
-        .text(d => d.ancestors().reverse().map(d => d.data.name).join("/"));
-
-    // Add column headers and values
-    for (const {label, value, format, x} of columns) {
-        svg.append("text")
-            .attr("dy", "0.32em")
-            .attr("y", -nodeSize)
-            .attr("x", x)
-            .attr("text-anchor", "end")
-            .attr("font-weight", "bold")
-            .attr("fill", "var(--vscode-editor-foreground)")
-            .text(label);
-
-        node.append("text")
-            .attr("dy", "0.32em")
-            .attr("x", x)
-            .attr("text-anchor", "end")
-            .attr("fill", d => d.children ? "var(--vscode-editor-foreground)" : "#555")
-            .text(d => format(value(d)));
-    }
+        .text(d => d.data.name);
+    
+	
 }
 
 function displayError(message) {
@@ -117,32 +169,36 @@ function displayError(message) {
         .attr("id", "error-message")
         .html(`
             <div class="error-icon">
-                <svg height="32" style="overflow:visible;enable-background:new 0 0 32 32" viewBox="0 0 32 32" width="32" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g><g id="Error_1_"><g id="Error"><circle cx="16" cy="16" id="BG" r="16" style="fill:#D72828;"/><path d="M14.5,25h3v-3h-3V25z M14.5,6v13h3V6H14.5z" id="Exclamatory_x5F_Sign" style="fill:#E6E6E6;"/></g></g></g></svg>
+                <svg height="32" style="overflow:visible;enable-background:new 0 0 32 32" viewBox="0 0 32 32" width="32" xml:space="preserve" xmlns="http://www.w3.org/2000/svg"><g><g id="Error_1_"><g id="Error"><circle cx="16" cy="16" id="BG" r="16" style="fill:#D72828;"/><path d="M14.5,25h3v-3h-3V25z M14.5,6v13h3V6H14.5z" id="Exclamatory_x5F_Sign" style="fill:#E6E6E6;"/></g></g></g></svg>
             </div>
             <p>${message}</p>
         `);
 }
 
-function handleNodeClick(event, d) {
-    vscode.postMessage({
-        type: 'openFile',
-        path: d.data.name
-    });
+function handleNodeClick(event, d) { 
+    if (d.data.children) { 
+        d.data._children = d.data.children; 
+        d.data.children = null; 
+		d.expanded = false;
+    } else if (d.data._children) { 
+        d.data.children = d.data._children; 
+        d.data._children = null; 
+		d.expanded = true;
+    } 
+    visualizeTree(nodeData);
 }
 
 // Listen for messages from VSCode
-window.addEventListener('message', event => {
-    const message = event.data;
-    switch (message.type) {
-        case 'treeData':
-            visualizeTree(message.data);
-            break;
-    }
+window.addEventListener('message', event => { 
+    const message = event.data; 
+    if (message.type === 'treeData') { 
+        visualizeTree(message.data); 
+    } 
 });
 
 // Handle window resize
-window.addEventListener('resize', () => {
-    if (nodeData) {
-        visualizeTree(nodeData);
-    }
+window.addEventListener('resize', () => { 
+    if (nodeData) { 
+        visualizeTree(nodeData); 
+    } 
 });
