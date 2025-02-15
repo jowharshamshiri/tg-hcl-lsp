@@ -36,6 +36,38 @@
             width: 100% !important;
             height: auto !important;
         }
+
+        /* Error message styling */
+        #error-message {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 120px;
+            margin: 1.5rem auto;
+            max-width: 500px;
+            color: var(--vscode-errorForeground);
+        }
+
+        #error-message p {
+            margin: 0.5rem 0 0 0;
+            font-size: 13px;
+            line-height: 1.4;
+            text-align: center;
+            color: var(--vscode-foreground);
+            opacity: 0.8;
+        }
+
+        .error-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .error-icon svg {
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>

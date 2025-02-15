@@ -10,6 +10,7 @@ import {
     Disposable, 
     window
 } from 'vscode';
+import { TerragruntConfig, TreeNode } from 'tghclparser';
 
 export class DependencyTreeViewProvider {
     public static currentPanel: DependencyTreeViewProvider | undefined;
@@ -78,9 +79,9 @@ export class DependencyTreeViewProvider {
         );
     }
 
-    public updateTreeData(treeData: any) {
+    public updateTreeData(rootNode: TreeNode<TerragruntConfig> | undefined) {
         if (this._panel) {
-            this._panel.webview.postMessage({ type: 'treeData', data: treeData });
+            this._panel.webview.postMessage({ type: 'treeData', data: rootNode });
         }
     }
 

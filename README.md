@@ -11,7 +11,8 @@ If you found this helpful, consider supporting my work with a [tip](https://ko-f
 ### Terragrunt.hcl Dependency Tree
 
 Visualize the dependency tree of Terragrunt configuration files 🚀
-![Dependency Tree](images/dependency-tree.png)
+Display output variables in the dependency tree 🚀
+![Dependency Tree](images/dependency-tree-w-outputs.png)
 Right-click in the editor and select "Show Terragrunt Dependency Tree" to view the dependency tree of the workspace.
 
 ### Syntax Highlighting and Validation

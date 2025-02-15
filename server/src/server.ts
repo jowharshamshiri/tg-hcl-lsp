@@ -198,12 +198,9 @@ connection.onExecuteCommand(async (params) => {
 			return;
 		}
 		
-		// Get the string representation without logging it
-		let treeString = rootNode.toString();
-		
 		// Send just once via notification
 		connection.sendNotification('terragrunt/dependencyTreeResult', {
-			result: treeString
+			rootNode:rootNode
 		});
 	}
 });
