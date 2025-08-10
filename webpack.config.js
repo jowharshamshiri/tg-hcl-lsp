@@ -54,6 +54,7 @@ const clientConfig = {
     filename: "extension.js",
     libraryTarget: "commonjs2",
   },
+  devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
   resolve: configureResolve(),
   watchOptions: isDevelopment ? {
@@ -91,6 +92,7 @@ const serverConfig = {
     filename: "server.js",
     libraryTarget: "commonjs2",
   },
+  devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
   resolve: configureResolve(),
   watchOptions: isDevelopment ? {

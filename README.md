@@ -2,6 +2,11 @@
 
 Language Server Protocol (LSP) server for Terragrunt HCL files providing convenience features for Terragrunt configuration files in Visual Studio Code. Install it from vscode [marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp&ssr=false#review-details) or search "Terragrunt Language Server" in vscode extensions panel.
 
+[![Version](https://img.shields.io/visual-studio-marketplace/v/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
+
+
 This extension is under active development and new features are being added regularly. Please report any issues or feature requests in the [GitHub repository](https://github.com/jowharshamshiri/tg-hcl-lsp/issues). 🚀🚀🚀
 
 If you found this helpful, consider supporting my work with a [tip](https://ko-fi.com/jowharshamshiri). Your support helps me create more quality tools.
