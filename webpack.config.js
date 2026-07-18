@@ -1,10 +1,22 @@
 const path = require("path");
+const crypto = require('crypto');
+const fs = require('fs');
 const dotenv = require('dotenv');
 const webpack = require('webpack');
 
 dotenv.config();
 const mode = process.env.BUILD_MODE || 'production';
 const isDevelopment = mode === 'development';
+const parserBundlePath = path.resolve(__dirname, '../tghclparser/dist/index.cjs');
+
+if (!fs.existsSync(parserBundlePath)) {
+  throw new Error(`Parser bundle not found: ${parserBundlePath}. Build tghclparser before bundling the extension.`);
+}
+
+const parserBundleHash = crypto
+  .createHash('sha256')
+  .update(fs.readFileSync(parserBundlePath))
+  .digest('hex');
 
 const configureExternals = () => {
   return {
@@ -18,7 +30,7 @@ const commonPlugins = [
   })
 ];
 
-const configureResolve = (languageServerTypesRoot) => {
+const configureResolve = (languageServerTypesRoot, aliases = {}) => {
   return {
     extensions: [".ts", ".js"],
     symlinks: true,
@@ -27,7 +39,8 @@ const configureResolve = (languageServerTypesRoot) => {
         __dirname,
         languageServerTypesRoot,
         'lib/esm/main.js'
-      )
+      ),
+      ...aliases
     }
   };
 };
@@ -81,7 +94,9 @@ const serverConfig = {
   },
   devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
-  resolve: configureResolve('server/node_modules/vscode-languageserver-types'),
+  resolve: configureResolve('server/node_modules/vscode-languageserver-types', {
+    'tghclparser$': parserBundlePath
+  }),
   watchOptions: isDevelopment ? {
     followSymlinks: true,
     ignored: /node_modules/
@@ -99,7 +114,10 @@ const serverConfig = {
       },
     ],
   },
-  plugins: commonPlugins,
+  plugins: [
+    ...commonPlugins,
+    new webpack.BannerPlugin(`tghclparser-bundle-sha256:${parserBundleHash}`)
+  ],
 };
 
 module.exports = [clientConfig, serverConfig];
