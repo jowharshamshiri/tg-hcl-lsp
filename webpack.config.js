@@ -1,5 +1,4 @@
 const path = require("path");
-const CopyPlugin = require("copy-webpack-plugin");
 const dotenv = require('dotenv');
 const webpack = require('webpack');
 
@@ -19,10 +18,17 @@ const commonPlugins = [
   })
 ];
 
-const configureResolve = () => {
+const configureResolve = (languageServerTypesRoot) => {
   return {
     extensions: [".ts", ".js"],
     symlinks: true,
+    alias: {
+      'vscode-languageserver-types$': path.resolve(
+        __dirname,
+        languageServerTypesRoot,
+        'lib/esm/main.js'
+      )
+    }
   };
 };
 
@@ -35,10 +41,13 @@ const clientConfig = {
     path: path.resolve(__dirname, "dist"),
     filename: "extension.js",
     libraryTarget: "commonjs2",
+    clean: {
+      keep: /^server\//
+    }
   },
   devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
-  resolve: configureResolve(),
+  resolve: configureResolve('client/node_modules/vscode-languageserver-types'),
   watchOptions: isDevelopment ? {
     followSymlinks: true,
     ignored: /node_modules/
@@ -56,12 +65,7 @@ const clientConfig = {
       },
     ],
   },
-  plugins: [
-    ...commonPlugins,
-    new CopyPlugin({
-      patterns: [{ from: "media", to: "media" }],
-    }),
-  ],
+  plugins: commonPlugins,
 };
 
 /** @type {import('webpack').Configuration} */
@@ -73,10 +77,11 @@ const serverConfig = {
     path: path.resolve(__dirname, "dist/server"),
     filename: "server.js",
     libraryTarget: "commonjs2",
+    clean: true,
   },
   devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
-  resolve: configureResolve(),
+  resolve: configureResolve('server/node_modules/vscode-languageserver-types'),
   watchOptions: isDevelopment ? {
     followSymlinks: true,
     ignored: /node_modules/

@@ -9,7 +9,7 @@ import {
 import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 import type { DependencyGraphNode } from './dependencyTreeHandler';
 
-let defaultClient: LanguageClient;
+let defaultClient: LanguageClient | undefined;
 const clients = new Map<string, LanguageClient>();
 
 let _sortedWorkspaceFolders: string[] | undefined;
@@ -29,7 +29,6 @@ function sortedWorkspaceFolders(): string[] {
 	}
 	return _sortedWorkspaceFolders;
 }
-Workspace.onDidChangeWorkspaceFolders(() => _sortedWorkspaceFolders = undefined);
 
 function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 	const sorted = sortedWorkspaceFolders();
@@ -60,8 +59,9 @@ function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFol
 }
 
 export function activate(context: ExtensionContext) {
-	let module = context.asAbsolutePath(path.join('dist', 'server', 'server.js'));
+	const module = context.asAbsolutePath(path.join('dist', 'server', 'server.js'));
 	const outputChannel: OutputChannel = Window.createOutputChannel('tg-hcl-lsp');
+	context.subscriptions.push(outputChannel);
 
 	function didOpenTextDocument(document: TextDocument): void {
 		// We are only interested in terragrunt/HCL files
@@ -84,8 +84,10 @@ export function activate(context: ExtensionContext) {
 				serverOptions,
 				createClientOptions(outputChannel)
 			);
-			defaultClient.start();
-			setupClientHandlers(defaultClient, context);
+			const client = defaultClient;
+			void startClient(client, context, outputChannel, () => {
+				if (defaultClient === client) defaultClient = undefined;
+			});
 		}
 
 		if (!folder) {
@@ -105,23 +107,30 @@ export function activate(context: ExtensionContext) {
 				serverOptions,
 				createClientOptions(outputChannel, folder)
 			);
-			client.start();
-			setupClientHandlers(client, context);
 			clients.set(folder.uri.toString(), client);
+			const folderUri = folder.uri.toString();
+			void startClient(client, context, outputChannel, () => {
+				if (clients.get(folderUri) === client) clients.delete(folderUri);
+			});
 		}
 	}
 
-	Workspace.onDidOpenTextDocument(didOpenTextDocument);
+	context.subscriptions.push(Workspace.onDidOpenTextDocument(didOpenTextDocument));
+	context.subscriptions.push(Workspace.onDidChangeWorkspaceFolders(() => {
+		_sortedWorkspaceFolders = undefined;
+	}));
 	Workspace.textDocuments.forEach(didOpenTextDocument);
-	Workspace.onDidChangeWorkspaceFolders((event) => {
+	context.subscriptions.push(Workspace.onDidChangeWorkspaceFolders((event) => {
 		for (const folder of event.removed) {
 			const client = clients.get(folder.uri.toString());
 			if (client) {
 				clients.delete(folder.uri.toString());
-				client.stop();
+				void client.stop().catch(error => {
+					outputChannel.appendLine(`Failed to stop language client: ${formatError(error)}`);
+				});
 			}
 		}
-	});
+	}));
 }
 
 export function deactivate(): Thenable<void> {
@@ -135,23 +144,44 @@ export function deactivate(): Thenable<void> {
 	return Promise.all(promises).then(() => undefined);
 }
 
-function setupClientHandlers(client: LanguageClient, context: ExtensionContext) {
-    client.onReady().then(() => {
+async function startClient(
+	client: LanguageClient,
+	context: ExtensionContext,
+	outputChannel: OutputChannel,
+	onFailure: () => void
+): Promise<void> {
+	try {
+		await client.start();
+		setupClientHandlers(client, context);
+	} catch (error) {
+		onFailure();
+		const message = `Terragrunt language server failed to start: ${formatError(error)}`;
+		outputChannel.appendLine(message);
+		void Window.showErrorMessage(message);
+		await client.dispose().catch(disposeError => {
+			outputChannel.appendLine(`Failed to dispose language client: ${formatError(disposeError)}`);
+		});
+	}
+}
+
+function setupClientHandlers(client: LanguageClient, context: ExtensionContext): void {
+	context.subscriptions.push(
 		client.onNotification('terragrunt/dependencyTreeStatus', () => {
 			DependencyTreeViewProvider.createOrShow(context.extensionUri);
-		});
+		}),
 
-        client.onNotification('terragrunt/dependencyTreeResult', (params: { rootNode?: DependencyGraphNode, result?: string }) => {
-            // Create or show the webview
-            DependencyTreeViewProvider.createOrShow(context.extensionUri);
+		client.onNotification('terragrunt/dependencyTreeResult', (params: { rootNode?: DependencyGraphNode, result?: string }) => {
+			DependencyTreeViewProvider.createOrShow(context.extensionUri);
 
-            // Update the webview with the tree data
+			// Update the webview with the tree data
 			if (DependencyTreeViewProvider.currentPanel) {
 				if (params.result) DependencyTreeViewProvider.currentPanel.showError(params.result);
 				else DependencyTreeViewProvider.currentPanel.updateTreeData(params.rootNode);
 			}
-        });
-    }).catch(err => {
-        console.error('Failed to setup client handlers:', err);
-    });
+		})
+	);
+}
+
+function formatError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
