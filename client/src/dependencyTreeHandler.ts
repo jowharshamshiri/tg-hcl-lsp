@@ -15,6 +15,16 @@ export interface DependencyGraphNode {
 	type: string;
 	uri?: string;
 	openable: boolean;
+	lineage?: {
+		includes: string[];
+		dependencies: string[];
+		reads: string[];
+		includedBy: string[];
+		dependedOnBy: string[];
+		readBy: string[];
+	};
+	reading: string[];
+	external: boolean;
 	children: DependencyGraphNode[];
 }
 
@@ -44,7 +54,7 @@ export class DependencyTreeViewProvider {
 
         const panel = window.createWebviewPanel(
             'terragruntDependencyTree',
-            'Terragrunt Dependency Tree',
+            'Terragrunt Lineage Graph',
             column || ViewColumn.One,
             {
                 enableScripts: true,

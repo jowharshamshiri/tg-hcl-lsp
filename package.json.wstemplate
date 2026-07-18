@@ -28,7 +28,7 @@
         "commands": [
             {
                 "command": "terragrunt.dependencyTree",
-                "title": "Show Terragrunt Dependency Tree",
+                "title": "Show Terragrunt Lineage Graph",
                 "enableCommandUris": true
             }
         ],

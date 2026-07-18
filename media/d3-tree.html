@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-{{nonce}}'; script-src 'nonce-{{nonce}}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Terragrunt dependency graph</title>
+  <title>Terragrunt lineage graph</title>
   <style nonce="{{nonce}}">
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
@@ -30,8 +30,8 @@
       min-width: 180px;
       max-width: 420px;
       flex: 1;
-      height: 32px;
-      padding: 0 9px;
+      height: 36px;
+      padding: 0 10px;
       color: var(--vscode-input-foreground);
       background: var(--vscode-input-background);
       border: 1px solid var(--vscode-input-border, transparent);
@@ -39,7 +39,7 @@
     }
     #filter:focus { border-color: var(--vscode-focusBorder); }
     button {
-      min-height: 32px;
+      min-height: 36px;
       padding: 0 12px;
       color: var(--vscode-button-secondaryForeground);
       background: var(--vscode-button-secondaryBackground);
@@ -64,7 +64,7 @@
     li::before { content: ''; position: absolute; top: 16px; left: -20px; width: 14px; border-top: 1px solid var(--vscode-tree-indentGuidesStroke); }
     #tree > ul > li::before { display: none; }
     summary, .leaf {
-      min-height: 32px;
+      min-height: 38px;
       display: flex;
       align-items: center;
       gap: 7px;
@@ -82,14 +82,17 @@
       font-size: 11px;
       text-align: center;
     }
+    .kind[data-kind="include"] { color: var(--vscode-charts-blue); background: color-mix(in srgb, var(--vscode-charts-blue) 16%, transparent); }
+    .kind[data-kind="dependency"] { color: var(--vscode-charts-purple); background: color-mix(in srgb, var(--vscode-charts-purple) 16%, transparent); }
+    .kind[data-kind="read"] { color: var(--vscode-charts-green); background: color-mix(in srgb, var(--vscode-charts-green) 16%, transparent); }
     .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .open {
-      min-width: 32px;
+      min-width: 44px;
       margin-left: auto;
-      padding: 0 8px;
+      padding: 0 10px;
       color: var(--vscode-textLink-foreground);
       background: transparent;
-      opacity: 0;
+      opacity: .72;
     }
     summary:hover .open, .leaf:hover .open, .open:focus-visible { opacity: 1; }
     .match > summary, .match > .leaf { background: var(--vscode-editor-findMatchHighlightBackground); }
@@ -102,16 +105,16 @@
 </head>
 <body>
   <header>
-    <div class="heading"><h1>Dependency graph</h1><span id="summary" aria-live="polite"></span></div>
-    <div class="toolbar" role="toolbar" aria-label="Dependency graph controls">
-      <input id="filter" type="search" placeholder="Filter files, units, or stacks" aria-label="Filter dependency graph">
+    <div class="heading"><h1>Lineage graph</h1><span id="summary" aria-live="polite"></span></div>
+    <div class="toolbar" role="toolbar" aria-label="Lineage graph controls">
+      <input id="filter" type="search" placeholder="Filter units, stacks, includes, dependencies, or reads" aria-label="Filter lineage graph">
       <button id="expand" type="button">Expand all</button>
       <button id="collapse" type="button">Collapse all</button>
     </div>
   </header>
   <main>
     <div id="status" role="status" aria-live="polite">Building the Terragrunt graph…</div>
-    <nav id="tree" aria-label="Terragrunt dependency graph" hidden></nav>
+    <nav id="tree" aria-label="Terragrunt lineage graph" hidden></nav>
   </main>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>

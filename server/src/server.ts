@@ -15,6 +15,7 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 import { ParsedDocument, Workspace } from 'tghclparser';
+import type { TerragruntConfig, TreeNode } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -23,6 +24,24 @@ const documents = new TextDocuments(TextDocument);
 const workspace = new Workspace();
 
 const parsedDocuments = new Map<string, ParsedDocument>();
+
+interface SerializedGraphNode {
+	name: string;
+	type: string;
+	uri: string;
+	openable: boolean;
+	lineage: {
+		includes: string[];
+		dependencies: string[];
+		reads: string[];
+		includedBy: string[];
+		dependedOnBy: string[];
+		readBy: string[];
+	};
+	reading: string[];
+	external: boolean;
+	children: SerializedGraphNode[];
+}
 
 let workspaceFolder: string | null;
 
@@ -92,13 +111,28 @@ connection.onExecuteCommand(async (params) => {
 				connection.sendNotification('terragrunt/dependencyTreeResult', { result: 'No Terragrunt configurations were found.' });
 				return;
 			}
-			const serialize = (node: any): any => ({
-				name: node.name,
-				type: node.type,
-				uri: node.data?.uri,
-				openable: node.data?.uri?.startsWith('file:') && fs.existsSync(new URL(node.data.uri)),
-				children: node.children?.map(serialize) ?? []
-			});
+			const serialize = (node: TreeNode<TerragruntConfig>): SerializedGraphNode => {
+				if (node.data.reading === undefined || node.data.external === undefined) {
+					throw new Error(`Incomplete lineage metadata for ${node.data.uri}`);
+				}
+				return {
+					name: node.name,
+					type: node.type,
+					uri: node.data.uri,
+					openable: node.data.uri.startsWith('file:') && fs.existsSync(new URL(node.data.uri)),
+					lineage: {
+						includes: node.data.includes,
+						dependencies: node.data.dependencies,
+						reads: node.data.reads,
+						includedBy: node.data.includedBy,
+						dependedOnBy: node.data.dependedOnBy,
+						readBy: node.data.readBy
+					},
+					reading: node.data.reading,
+					external: node.data.external,
+					children: node.children.map(serialize)
+				};
+			};
 			connection.sendNotification('terragrunt/dependencyTreeResult', { rootNode: serialize(rootNode) });
 		} catch (error) {
 			connection.sendNotification('terragrunt/dependencyTreeResult', {

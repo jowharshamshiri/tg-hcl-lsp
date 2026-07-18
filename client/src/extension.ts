@@ -50,8 +50,8 @@ function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFol
 		documentSelector: folder
 			? [{ scheme: 'file', language: 'terragrunt', pattern: `${folder.uri.fsPath}/**/*.hcl` }]
 			: [
-				{ scheme: 'untitled', language: 'terragrunt' },
-				{ scheme: 'untitled', language: 'terragrunt', pattern: '**/*.hcl' }
+				{ scheme: 'file', language: 'terragrunt', pattern: '**/*.hcl' },
+				{ scheme: 'untitled', language: 'terragrunt' }
 			],
 		diagnosticCollectionName: 'tg-hcl-lsp',
 		workspaceFolder: folder,
@@ -70,8 +70,10 @@ export function activate(context: ExtensionContext) {
 		}
 
 		const uri = document.uri;
-		// Untitled files go to a default client.
-		if (uri.scheme === 'untitled' && !defaultClient) {
+		let folder = Workspace.getWorkspaceFolder(uri);
+		// Untitled and standalone files use a rootless client so language features
+		// do not depend on first adding the document's directory as a workspace.
+		if (!folder && !defaultClient) {
 			const serverOptions = {
 				run: { module, transport: TransportKind.ipc },
 				debug: { module, transport: TransportKind.ipc }
@@ -84,10 +86,8 @@ export function activate(context: ExtensionContext) {
 			);
 			defaultClient.start();
 			setupClientHandlers(defaultClient, context);
-			return;
 		}
 
-		let folder = Workspace.getWorkspaceFolder(uri);
 		if (!folder) {
 			return;
 		}

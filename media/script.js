@@ -12,6 +12,7 @@ function setStatus(message) {
   status.textContent = message;
   status.hidden = false;
   tree.hidden = true;
+  tree.setAttribute('aria-busy', 'true');
   summary.textContent = '';
 }
 
@@ -35,11 +36,12 @@ function row(node, className) {
   element.className = className;
   const kind = document.createElement('span');
   kind.className = 'kind';
+  kind.dataset.kind = node.type;
   kind.textContent = node.type;
   const name = document.createElement('span');
   name.className = 'name';
-  name.textContent = node.name;
-  name.title = node.name;
+  name.textContent = node.external ? `${node.name} (external)` : node.name;
+  name.title = node.external ? `${node.name} — outside this workspace` : node.name;
   element.append(kind, name);
   const button = openButton(node);
   if (button) element.append(button);
@@ -69,6 +71,10 @@ function nodeCount(node) {
   return 1 + (node.children ?? []).reduce((count, child) => count + nodeCount(child), 0);
 }
 
+function relationshipCount(node, type) {
+  return (node.type === type ? 1 : 0) + (node.children ?? []).reduce((count, child) => count + relationshipCount(child, type), 0);
+}
+
 function render(node) {
   rootNode = node;
   tree.replaceChildren();
@@ -80,9 +86,11 @@ function render(node) {
   list.append(nodeElement(node));
   tree.append(list);
   tree.hidden = false;
+  tree.setAttribute('aria-busy', 'false');
   status.hidden = true;
   const count = Math.max(0, nodeCount(node) - 1);
-  summary.textContent = `${count} configuration${count === 1 ? '' : 's'}`;
+  const reads = relationshipCount(node, 'read');
+  summary.textContent = `${count} node${count === 1 ? '' : 's'} · ${reads} read${reads === 1 ? '' : 's'}`;
   applyFilter();
 }
 
