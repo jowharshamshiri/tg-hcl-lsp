@@ -49,13 +49,20 @@ The implementation tracks the official Terragrunt [blocks](https://docs.terragru
 
 ## Development
 
-Install dependencies in both sibling projects, then build from this directory. The webpack configuration always bundles the sibling `tghclparser` source, ensuring extension builds cannot accidentally use an older published parser.
+Install dependencies and create the extension bundle:
 
 ```sh
-cd ../tghclparser && npm install
-cd ../tg-hcl-lsp && npm install
+npm install
 npm run webpack
 ```
+
+For continuous development, rebuild on source changes:
+
+```sh
+npm run watch
+```
+
+Launch the repository as a VS Code Extension Development Host after bundling it. Test completion, diagnostics, hover, and document links with current Terragrunt HCL files. Run **Show Terragrunt Lineage Graph** from the Command Palette while an HCL editor is active to inspect includes, dependencies, stacks, and reading lineage.
 
 ## License
 
