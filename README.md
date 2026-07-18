@@ -1,92 +1,62 @@
 # Terragrunt HCL Language Server
 
-Language Server Protocol (LSP) server for Terragrunt HCL files providing convenience features for Terragrunt configuration files in Visual Studio Code. Install it from vscode [marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp&ssr=false#review-details) or search "Terragrunt Language Server" in vscode extensions panel.
+VS Code language support for the current Terragrunt 1.x HCL language. Version 1 intentionally follows the current regime only; removed and deprecated compatibility syntax is reported instead of silently accepted.
 
-[![Version](https://img.shields.io/visual-studio-marketplace/v/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
-
-
-This extension is under active development and new features are being added regularly. Please report any issues or feature requests in the [GitHub repository](https://github.com/jowharshamshiri/tg-hcl-lsp/issues). 🚀🚀🚀
-
-If you found this helpful, consider supporting my work with a [tip](https://ko-fi.com/jowharshamshiri). Your support helps me create more quality tools.
+Install “Terragrunt Language Server” from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp), or build the extension from this repository.
 
 ## Features
 
-### Terragrunt.hcl Dependency Tree
+- Context-aware completion for blocks, attributes, functions, locals, dependencies, includes, features, values, units, and stacks
+- File-kind-aware validation for unit, explicit stack, values, and autoinclude files
+- Hover information and document links
+- Workspace dependency graph covering includes, dependencies, units, and nested stacks
+- Dependency output discovery from state
+- Syntax highlighting for current Terragrunt blocks, attributes, references, and functions
 
-Visualize the dependency tree of Terragrunt configuration files 🚀
-Display output variables in the dependency tree 🚀
-![Dependency Tree](images/dependency-tree-w-outputs.png)
-Right-click in the editor and select "Show Terragrunt Dependency Tree" to view the dependency tree of the workspace.
+The dependency graph follows VS Code interaction conventions. It opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. “Open” is shown only for files inside the active workspace.
 
-### Syntax Highlighting and Validation
+## Current Terragrunt syntax
 
-- Real-time error detection and diagnostics as you type
-- Incremental document parsing for better performance
-- Syntax highlighting for Terragrunt configuration files
-- Document links for easy navigation
+Root configurations should use named includes and explicit filenames:
 
-### IntelliSense
+```hcl
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+```
 
-- Context-aware code completions
-- Trigger completions automatically after typing '.', '=', or space
-- Hover information for detailed documentation and type information with examples
-- Locals and variables completions 🚀
-- Output variables completions based on terraform state 🚀
+Explicit stacks are recognized through `terragrunt.stack.hcl`:
 
-### Document Management
+```hcl
+unit "network" {
+  source = "../catalog/network"
+  path   = "network"
+}
 
-- Full support for document lifecycle (open, change, close)
-- Maintains parsed document state for quick access
-- Workspace-aware language support
+unit "app" {
+  source = "../catalog/app"
+  path   = "app"
 
-### Error Reporting
+  autoinclude {
+    dependency "network" {
+      config_path = unit.network.path
+    }
+  }
+}
+```
 
-- Detailed diagnostic messages for syntax and semantic errors
-- Real-time error updates as you edit
+The implementation tracks the official Terragrunt [blocks](https://docs.terragrunt.com/reference/hcl/blocks/), [attributes](https://docs.terragrunt.com/reference/hcl/attributes/), [functions](https://docs.terragrunt.com/reference/hcl/functions/), and [stacks](https://docs.terragrunt.com/features/stacks/) documentation.
 
-### Performance
+## Development
 
-- Incremental text document synchronization
-- Efficient caching of parsed documents
-- Optimized for large files and frequent updates
+Install dependencies in both sibling projects, then build from this directory. The webpack configuration always bundles the sibling `tghclparser` source, ensuring extension builds cannot accidentally use an older published parser.
 
-## Installation
-
-1. Clone this repository:
-
-   ```
-   git clone https://github.com/jowharshamshiri/tg-hcl-lsp.git
-   ```
-
-2. Navigate to the project directory:
-
-   ```
-   cd tg-hcl-lsp
-   ```
-
-3. Install dependencies:
-
-   ```
-   npm install
-   ```
-
-4. Build the VS Code extension:
-
-   ```
-   npm run compile
-   code .
-   ```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+```sh
+cd ../tghclparser && npm install
+cd ../tg-hcl-lsp && npm install
+npm run webpack
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Thanks to the Terragrunt community for inspiration and use cases. Special thanks to rtizzy on github for reminding me to build this extension. Also thanks to and-win, gsouf, lucalooz, jonath92 for filing issues and feature requests.
+MIT. See [LICENSE](LICENSE).

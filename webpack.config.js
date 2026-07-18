@@ -7,18 +7,10 @@ dotenv.config();
 const mode = process.env.BUILD_MODE || 'production';
 const isDevelopment = mode === 'development';
 
-// Configure the external handling based on mode
 const configureExternals = () => {
-  const baseExternals = {
+  return {
     vscode: "commonjs vscode"
   };
-
-  // In production, treat tghclparser as external
-  if (!isDevelopment) {
-    baseExternals.tghclparser = "commonjs tghclparser";
-  }
-
-  return baseExternals;
 };
 
 const commonPlugins = [
@@ -27,21 +19,11 @@ const commonPlugins = [
   })
 ];
 
-// Configure module resolution based on mode
 const configureResolve = () => {
-  const baseResolve = {
+  return {
     extensions: [".ts", ".js"],
     symlinks: true,
   };
-
-  // In development, add alias for local tghclparser
-  if (isDevelopment) {
-    baseResolve.alias = {
-      'tghclparser': path.resolve(__dirname, '../tghclparser')
-    };
-  }
-
-  return baseResolve;
 };
 
 /** @type {import('webpack').Configuration} */
@@ -59,13 +41,13 @@ const clientConfig = {
   resolve: configureResolve(),
   watchOptions: isDevelopment ? {
     followSymlinks: true,
-    ignored: /node_modules\/(?!tghclparser)/
+    ignored: /node_modules/
   } : undefined,
   module: {
     rules: [
       {
         test: /\.ts$/,
-        exclude: isDevelopment ? /node_modules\/(?!tghclparser)/ : /node_modules/,
+        exclude: /node_modules/,
         use: [
           {
             loader: "ts-loader",
@@ -97,13 +79,13 @@ const serverConfig = {
   resolve: configureResolve(),
   watchOptions: isDevelopment ? {
     followSymlinks: true,
-    ignored: /node_modules\/(?!tghclparser)/
+    ignored: /node_modules/
   } : undefined,
   module: {
     rules: [
       {
         test: /\.ts$/,
-        exclude: isDevelopment ? /node_modules\/(?!tghclparser)/ : /node_modules/,
+        exclude: /node_modules/,
         use: [
           {
             loader: "ts-loader",

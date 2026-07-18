@@ -13,7 +13,6 @@
 	  { "open": "[", "close": "]" },
 	  { "open": "(", "close": ")" },
 	  { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
-	  { "open": "'", "close": "'", "notIn": ["string", "comment"] },
 	  { "open": "${", "close": "}" }
 	],
 	"surroundingPairs": [
@@ -21,12 +20,11 @@
 	  ["[", "]"],
 	  ["(", ")"],
 	  ["\"", "\""],
-	  ["'", "'"],
 	  ["${", "}"]
 	],
 	"indentationRules": {
-	  "increaseIndentPattern": "^.*(\\{[^}\"'\\/]*|\\([^)\"'\\/]*|\\[[^\\]\"'\\/]*)$|^\\s*\\b(terraform|resource|data|module|provider|variable|output|locals|dependency|include|generate|remote_state)\\b\\s*\\S+\\s*\"[^\"]*\"\\s*$)",
-	  "decreaseIndentPattern": "^\\s*(\\}|\\]|\\)|\\bend\\b)"
+	  "increaseIndentPattern": "^.*(?:\\{|\\[|\\()\\s*$",
+	  "decreaseIndentPattern": "^\\s*[}\\])]"
 	},
 	"onEnterRules": [
 	  {
@@ -34,7 +32,7 @@
 		"action": { "indent": "none", "appendText": "# " }
 	  },
 	  {
-		"beforeText": "^\\s*\\b(?:terraform|resource|data|module|provider|variable|output|locals|dependency|include|generate|remote_state)\\b\\s+.*\\{\\s*$",
+		"beforeText": "^\\s*[a-zA-Z_][a-zA-Z0-9_-]*(?:\\s+\"[^\"]+\")?\\s*\\{\\s*$",
 		"action": { "indent": "increase" }
 	  },
 	  {

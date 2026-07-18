@@ -31,7 +31,7 @@
 		"attributes": {
 			"patterns": [
 				{
-					"match": "\\b(path|instance_suffix|site_type|site_name|kubeconfig_file|commands|execute|config_path|paths|config|generate|before_hook|after_hook|backend|config|if_exists|contents)\\b(?=\\s*=)(?<!(?:locals|inputs|dependency)\\s*=\\s*{[^}]*)",
+					"match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b(?=\\s*=)",
 					"name": "support.type.property-name.hcl"
 				}
 			]
@@ -52,7 +52,7 @@
 		"blocks": {
 			"patterns": [
 				{
-					"match": "\\b(terraform|retryable_errors|extra_arguments|include|dependency|dependencies|locals|inputs|remote_state|generate|before_hook|after_hook)\\b",
+					"match": "\\b(terraform|extra_arguments|include|dependency|dependencies|locals|remote_state|generate|before_hook|after_hook|error_hook|catalog|engine|feature|exclude|errors|retry|ignore|unit|stack|autoinclude)\\b",
 					"name": "keyword.control.hcl"
 				}
 			]
@@ -91,7 +91,7 @@
 		"functions": {
 			"patterns": [
 				{
-					"match": "\\b(merge|length|keys|values|lookup|element|split|join|replace|trim|upper|lower|format|formatlist|file|jsonencode|jsondecode|yamlencode|yamldecode|base64encode|base64decode|dirname|pathexpand|abspath|basename|regex|regexall|timestamp|timeadd|uuid|coalesce|coalescelist|flatten|setintersection|setunion|setproduct|alltrue|anytrue|can|try|range|ceil|floor|log|max|min|parseint|pow|signum|chomp|indent|title|zipmap|get_terraform_commands_that_need_vars|find_in_parent_folders|path_relative_to_include)\\b(?=\\()",
+					"match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b(?=\\s*\\()",
 					"name": "support.function.hcl"
 				}
 			]

@@ -7,7 +7,7 @@ import {
 	LanguageClient, LanguageClientOptions, TransportKind
 } from 'vscode-languageclient/node';
 import { DependencyTreeViewProvider } from './dependencyTreeHandler';
-import { TerragruntConfig, TreeNode } from 'tghclparser';
+import type { DependencyGraphNode } from './dependencyTreeHandler';
 
 let defaultClient: LanguageClient;
 const clients = new Map<string, LanguageClient>();
@@ -55,19 +55,7 @@ function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFol
 			],
 		diagnosticCollectionName: 'tg-hcl-lsp',
 		workspaceFolder: folder,
-		outputChannel: outputChannel,
-		middleware: {
-			provideCodeLenses: async (document, token, next) => {
-				const result = await next(document, token);
-				return result;
-			},
-			provideCodeActions: async (document, range, context, token, next) => {
-				outputChannel.appendLine(`Code action requested for ${document.uri}`);
-				const actions = await next(document, range, context, token);
-				outputChannel.appendLine(`Returned actions: ${JSON.stringify(actions)}`);
-				return actions;
-			}
-		}
+		outputChannel: outputChannel
 	};
 }
 
@@ -149,21 +137,19 @@ export function deactivate(): Thenable<void> {
 
 function setupClientHandlers(client: LanguageClient, context: ExtensionContext) {
     client.onReady().then(() => {
-        console.log('Setting up client notification handlers');
+		client.onNotification('terragrunt/dependencyTreeStatus', () => {
+			DependencyTreeViewProvider.createOrShow(context.extensionUri);
+		});
 
-        client.onNotification('terragrunt/functionEvaluation', (params: { function: string, result: string }) => {
-            console.log('Received function evaluation notification:', params);
-            Window.showInformationMessage(`${params.function}: ${params.result}`);
-        });
-
-        client.onNotification('terragrunt/dependencyTreeResult', (params: { rootNode: TreeNode<TerragruntConfig> | undefined }) => {
+        client.onNotification('terragrunt/dependencyTreeResult', (params: { rootNode?: DependencyGraphNode, result?: string }) => {
             // Create or show the webview
             DependencyTreeViewProvider.createOrShow(context.extensionUri);
 
             // Update the webview with the tree data
-            if (DependencyTreeViewProvider.currentPanel) {
-                DependencyTreeViewProvider.currentPanel.updateTreeData(params.rootNode);
-            }
+			if (DependencyTreeViewProvider.currentPanel) {
+				if (params.result) DependencyTreeViewProvider.currentPanel.showError(params.result);
+				else DependencyTreeViewProvider.currentPanel.updateTreeData(params.rootNode);
+			}
         });
     }).catch(err => {
         console.error('Failed to setup client handlers:', err);

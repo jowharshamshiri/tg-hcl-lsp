@@ -1,5 +1,5 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import {
     workspace as Workspace, 
     window as Window, 
@@ -10,7 +10,13 @@ import {
     Disposable, 
     window
 } from 'vscode';
-import { TerragruntConfig, TreeNode } from 'tghclparser';
+export interface DependencyGraphNode {
+	name: string;
+	type: string;
+	uri?: string;
+	openable: boolean;
+	children: DependencyGraphNode[];
+}
 
 export class DependencyTreeViewProvider {
     public static currentPanel: DependencyTreeViewProvider | undefined;
@@ -56,12 +62,11 @@ export class DependencyTreeViewProvider {
         this._panel.webview.onDidReceiveMessage(
             async message => {
                 switch (message.type) {
-                    case 'openFile':
-                        const workspaceRoot = Workspace.workspaceFolders?.[0].uri.fsPath;
-                        if (workspaceRoot) {
-                            const filePath = path.join(workspaceRoot, message.path);
-                            const uri = Uri.file(filePath);
-                            try {
+                    case 'openFile': {
+						const uri = Uri.parse(message.uri);
+						const folder = Workspace.getWorkspaceFolder(uri);
+						if (uri.scheme === 'file' && folder) {
+							try {
                                 const doc = await Workspace.openTextDocument(uri);
                                 await Window.showTextDocument(doc, {
                                     preview: false,
@@ -70,8 +75,9 @@ export class DependencyTreeViewProvider {
                             } catch (error) {
                                 Window.showErrorMessage(`Error opening file: ${error}`);
                             }
-                        }
-                        break;
+						} else Window.showErrorMessage('The selected configuration is outside the current workspace.');
+						break;
+					}
                 }
             },
             undefined,
@@ -79,11 +85,15 @@ export class DependencyTreeViewProvider {
         );
     }
 
-    public updateTreeData(rootNode: TreeNode<TerragruntConfig> | undefined) {
+    public updateTreeData(rootNode: DependencyGraphNode | undefined) {
         if (this._panel) {
             this._panel.webview.postMessage({ type: 'treeData', data: rootNode });
         }
     }
+
+	public showError(message: string) {
+		this._panel.webview.postMessage({ type: 'treeError', message });
+	}
 
     private _update() {
         const webview = this._panel.webview;
@@ -94,6 +104,7 @@ export class DependencyTreeViewProvider {
         // Get the local path to script file
         const scriptPathOnDisk = Uri.joinPath(this._extensionUri, 'media', 'script.js');
         const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
+		const nonce = crypto.randomBytes(16).toString('base64');
 
         // Get path to HTML file
         const htmlPathOnDisk = Uri.joinPath(this._extensionUri, 'media', 'd3-tree.html');
@@ -101,6 +112,7 @@ export class DependencyTreeViewProvider {
 
         // Replace {{scriptUri}} with the actual URI of the script
         htmlContent = htmlContent.replace('{{scriptUri}}', scriptUri.toString());
+		htmlContent = htmlContent.split('{{nonce}}').join(nonce);
 
         return htmlContent;
     }

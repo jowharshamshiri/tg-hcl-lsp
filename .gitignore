@@ -31,5 +31,8 @@ coverage
 *.sln
 *.sw?
 
-.trash/
 .env
+.wsb/
+
+*.log
+.scrap/
