@@ -70,4 +70,6 @@ Launch the repository as a VS Code Extension Development Host after bundling it.
 
 MIT. See [LICENSE](LICENSE).
 
-This is a community-supported project and is not affiliated with Gruntworks, Inc. or the Terragrunt project.
+This is a community-supported project and is not affiliated with Gruntworks, Inc. or the Terragrunt project. You can support the project by starring it on GitHub or contributing to it. Pull requests are welcome. 
+
+<a href='https://ko-fi.com/I2I51AM5W7' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
