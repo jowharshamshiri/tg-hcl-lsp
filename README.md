@@ -4,6 +4,8 @@ VS Code language support for the current Terragrunt 1.x HCL language. Version 1 
 
 Install “Terragrunt Language Server” from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp), or build the extension from this repository.
 
+![Terragrunt HCL Language Server](./screenshot.png)
+
 ## Features
 
 - Context-aware completion for blocks, attributes, functions, locals, dependencies, includes, features, values, units, and stacks
@@ -67,3 +69,5 @@ Launch the repository as a VS Code Extension Development Host after bundling it.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+This is a community-supported project and is not affiliated with Gruntworks, Inc. or the Terragrunt project.
