@@ -3,7 +3,7 @@
 	"description": "VSCode extension for Terragrunt HCL language support",
 	"author": "Bahram Shamshiri",
 	"license": "MIT",
-	"version": "1.53.363",
+	"version": "1.54.369",
 	"publisher": "jowharshamshiri",
 	"repository": {
 	  "type": "git",
