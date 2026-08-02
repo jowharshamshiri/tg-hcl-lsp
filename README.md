@@ -1,23 +1,37 @@
 # Terragrunt HCL Language Server
 
-VS Code language support for the current Terragrunt 1.x HCL language. Version 1 intentionally follows the current regime only; removed and deprecated compatibility syntax is reported instead of silently accepted.
+Rich, context-aware editor support for the Terragrunt 1.x configuration model — completions, validation, hover docs, clickable navigation, and a visual lineage graph.
 
-Install “Terragrunt Language Server” from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp), or build the extension from this repository.
+This is a community-supported project. It is not affiliated with Gruntworks, Inc. or the Terragrunt project, but it tracks the official Terragrunt documentation closely and follows the current 1.x regime.
+
+Install **Terragrunt Language Server** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp), or build the extension from this repository.
 
 ![Terragrunt HCL Language Server](./screenshot.png)
 
 ## Features
 
-- Context-aware completion for blocks, attributes, functions, locals, dependencies, includes, features, values, units, and stacks
-- File-kind-aware validation for unit, explicit stack, values, and autoinclude files
-- Hover information and document links
-- Workspace dependency graph covering includes, dependencies, units, and nested stacks
-- Dependency output discovery from state
-- Syntax highlighting for current Terragrunt blocks, attributes, references, and functions
+- **Context-aware completions** for blocks, attributes, functions, locals, dependencies, includes, features, values, units, and stacks
+- **File-kind-aware validation** that knows the difference between a unit, an explicit stack, a values file, and an autoinclude — with current-regime diagnostics that flag removed and deprecated syntax
+- **Hover documentation** and **clickable document links** for includes, dependencies, and read files
+- **Show Terragrunt Lineage Graph** — a visual, interactive graph of the whole workspace covering includes, dependencies, units, nested stacks, and reading lineage, with dependency outputs surfaced from state
+- **Syntax highlighting** for Terragrunt blocks, attributes, references, and functions
 
-The dependency graph follows VS Code interaction conventions. It opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. “Open” is shown only for files inside the active workspace.
+The lineage graph opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. **Open** is shown only for files inside the active workspace.
 
-## Current Terragrunt syntax
+## What it understands
+
+- `terragrunt.hcl` and named shared unit configurations such as `root.hcl`
+- `terragrunt.stack.hcl` explicit stacks
+- `terragrunt.values.hcl` generated stack values
+- `terragrunt.autoinclude.hcl` and `terragrunt.autoinclude.stack.hcl`
+
+## Getting started
+
+1. Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp).
+2. Open any `.hcl` file in a Terragrunt workspace — completions, validation, hover, and links work immediately.
+3. Run **Show Terragrunt Lineage Graph** from the Command Palette while an HCL editor is active to see how the units in your workspace include, depend on, and read each other.
+
+## Terragrunt 1.x first
 
 Root configurations should use named includes and explicit filenames:
 
@@ -64,7 +78,9 @@ For continuous development, rebuild on source changes:
 npm run watch
 ```
 
-Launch the repository as a VS Code Extension Development Host after bundling it. Test completion, diagnostics, hover, and document links with current Terragrunt HCL files. Run **Show Terragrunt Lineage Graph** from the Command Palette while an HCL editor is active to inspect includes, dependencies, stacks, and reading lineage.
+Launch the repository as a VS Code Extension Development Host after bundling it. Test completion, diagnostics, hover, and document links with current Terragrunt HCL files, or open the lineage graph from the Command Palette while an HCL editor is active.
+
+Contributions are welcome — bug reports, feature ideas, and pull requests all help. The parsing and language-service engine is developed separately in [tghclparser](https://github.com/jowharshamshiri/tghclparser) and published as a standalone npm package, so fixes there flow into the extension.
 
 ## Thanks
 
