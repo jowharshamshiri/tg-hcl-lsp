@@ -1,6 +1,6 @@
 import * as path from 'path';
 import {
-	workspace as Workspace, window as Window, ExtensionContext, TextDocument, OutputChannel, WorkspaceFolder, Uri
+	workspace as Workspace, window as Window, ExtensionContext, TextDocument, OutputChannel, WorkspaceFolder, Uri, Range
 } from 'vscode';
 
 import {
@@ -11,6 +11,7 @@ import type { DependencyGraphNode } from './dependencyTreeHandler';
 
 let defaultClient: LanguageClient | undefined;
 const clients = new Map<string, LanguageClient>();
+let evaluatableDecoration: ReturnType<typeof Window.createTextEditorDecorationType>;
 
 let _sortedWorkspaceFolders: string[] | undefined;
 function sortedWorkspaceFolders(): string[] {
@@ -62,6 +63,8 @@ export function activate(context: ExtensionContext) {
 	const module = context.asAbsolutePath(path.join('dist', 'server', 'server.js'));
 	const outputChannel: OutputChannel = Window.createOutputChannel('tg-hcl-lsp');
 	context.subscriptions.push(outputChannel);
+	evaluatableDecoration = Window.createTextEditorDecorationType({ textDecoration: 'underline dotted #8b5cf6' });
+	context.subscriptions.push(evaluatableDecoration);
 
 	function didOpenTextDocument(document: TextDocument): void {
 		// We are only interested in terragrunt/HCL files
@@ -166,6 +169,11 @@ async function startClient(
 
 function setupClientHandlers(client: LanguageClient, context: ExtensionContext): void {
 	context.subscriptions.push(
+		client.onNotification('terragrunt/evaluatableRanges', (params: { uri: string; ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> }) => {
+			const editor = Window.visibleTextEditors.find(candidate => candidate.document.uri.toString() === params.uri);
+			if (!editor) return;
+			editor.setDecorations(evaluatableDecoration, params.ranges.map(range => ({ range: new Range(range.start.line, range.start.character, range.end.line, range.end.character) })));
+		}),
 		client.onNotification('terragrunt/dependencyTreeStatus', () => {
 			DependencyTreeViewProvider.createOrShow(context.extensionUri);
 		}),

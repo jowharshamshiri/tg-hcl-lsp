@@ -6,16 +6,19 @@ import {
 	CompletionItem,
 	TextDocumentChangeEvent,
 	InitializeParams,
+	DiagnosticSeverity,
 	MarkupKind
 } from 'vscode-languageserver/node';
 
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { ParsedDocument, Workspace } from 'tghclparser';
-import type { TerragruntConfig, TreeNode } from 'tghclparser';
+import { ConfigEvaluator, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
+import type { RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -45,6 +48,58 @@ interface SerializedGraphNode {
 
 let workspaceFolder: string | null;
 
+const evaluator = new ConfigEvaluator({
+	environmentVariables: Object.fromEntries(
+		Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+	),
+	terraformCommand: '',
+	terraformCliArgs: [],
+	resolveDependency: async (configPath, name) => {
+		const dependencies = await workspace.getDependencies(pathToFileURL(configPath).toString());
+		const dependency = dependencies.find(candidate => candidate.parameterValue === name);
+		if (!dependency) return undefined;
+		let outputs = dependency.outputs;
+		if (!outputs || outputs.size === 0) {
+			const dependencyDocument = await workspace.getParsedDocument(dependency.uri);
+			outputs = dependencyDocument ? await dependencyDocument.getAllOutputs() : undefined;
+		}
+		if (!outputs || outputs.size === 0) return undefined;
+		return {
+			type: 'object',
+			value: new Map([['outputs', { type: 'object', value: outputs }]])
+		} as RuntimeValue<ValueType>;
+	}
+});
+
+function filePathFromUri(uri: string): string {
+	if (!uri.startsWith('file:')) throw new Error(`Semantic evaluation requires a file URI: ${uri}`);
+	return fileURLToPath(uri);
+}
+
+function evaluationRoot(uri: string): string {
+	if (workspaceFolder?.startsWith('file:')) return filePathFromUri(workspaceFolder);
+	return path.dirname(filePathFromUri(uri));
+}
+
+function evaluationDiagnostic(error: string) {
+	return {
+		severity: DiagnosticSeverity.Warning,
+		range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+		message: `Configuration evaluation: ${error}`,
+		source: 'terragrunt-evaluation'
+	};
+}
+
+function valueMarkdown(value: RuntimeValue<ValueType>): string {
+	const plain = runtimeValueToPlain(value);
+	if (plain === null || typeof plain !== 'object') return `\`${String(plain).replace(/`/g, '\\`')}\``;
+	return `\`\`\`json\n${JSON.stringify(plain, null, 2)}\n\`\`\``;
+}
+
+async function evaluateDocument(uri: string, content: string) {
+	return evaluator.evaluateUnit(filePathFromUri(uri), content, evaluationRoot(uri));
+}
+
 async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>) {
 	try {
 		const document = event.document;
@@ -53,10 +108,18 @@ async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>
 
 		await workspace.addDocument(parsedDocument);
 
-		const diagnostics = parsedDocument.getDiagnostics();
+		const diagnostics = [...parsedDocument.getDiagnostics()];
+		if (diagnostics.every(diagnostic => diagnostic.severity !== DiagnosticSeverity.Error)) {
+			const evaluation = await evaluateDocument(document.uri, document.getText());
+			if (!evaluation.valid && evaluation.error) diagnostics.push(evaluationDiagnostic(evaluation.error));
+		}
 		connection.sendDiagnostics({
 			uri: document.uri,
 			diagnostics
+		});
+		connection.sendNotification('terragrunt/evaluatableRanges', {
+			uri: document.uri,
+			ranges: await evaluatableRanges(parsedDocument.getAST(), document)
 		});
 	} catch (error) {
 		connection.console.error(
@@ -155,14 +218,26 @@ connection.onHover(async (params) => {
 		}
 
 		const hoverResult = await parsedDocument.getHoverInfo(params.position);
-		if (!hoverResult || !hoverResult.value) {
+		const evaluated = await evaluator.evaluateAtPosition(
+			filePathFromUri(document.uri),
+			document.getText(),
+			evaluationRoot(document.uri),
+			params.position
+		);
+		if (!hoverResult && !evaluated) {
 			return null;
 		}
+		const base = hoverResult?.value ?? '';
+		const valueSection = evaluated
+			? runtimeValueToPlain(evaluated) === null || typeof runtimeValueToPlain(evaluated) !== 'object'
+				? `⚡ ${valueMarkdown(evaluated)}\n\n---\n\n`
+				: `⚡\n\n${valueMarkdown(evaluated)}\n\n---\n\n`
+			: '';
 
 		return {
 			contents: {
 				kind: MarkupKind.Markdown,
-				value: hoverResult.value
+				value: `${valueSection}${base}`
 			},
 			// range: hoverResult.range
 		};
@@ -172,6 +247,38 @@ connection.onHover(async (params) => {
 		return null;
 	}
 });
+
+async function evaluatableRanges(ast: any, document: TextDocument): Promise<Array<{ start: { line: number; character: number }; end: { line: number; character: number } }>> {
+	const nodes = new Map<string, { position: { line: number; character: number }; ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> }>();
+	const visit = (node: any): void => {
+		const location = node?.location;
+		if (node?.type === 'attribute' && location) {
+			const identifier = node.children?.find((child: any) => child.type === 'attribute_identifier');
+			const value = node.children?.find((child: any) => child.type !== 'attribute_identifier');
+			if (identifier?.location && value?.location) {
+				const position = document.positionAt(value.location.start.offset);
+				const keyRange = {
+					start: document.positionAt(identifier.location.start.offset),
+					end: document.positionAt(identifier.location.end.offset)
+				};
+				nodes.set(`key:${identifier.location.start.offset}:${identifier.location.end.offset}`, { position, ranges: [keyRange] });
+			}
+		}
+		if (location && ['function_call', 'reference', 'local_reference', 'dependency_reference', 'terraform_reference', 'interpolated_string', 'ternary_expression', 'string_lit', 'number_lit', 'boolean_lit', 'null_lit'].includes(node.type)) {
+			const position = document.positionAt(location.start.offset);
+			const end = document.positionAt(location.end.offset);
+			nodes.set(`${location.start.offset}:${location.end.offset}`, { position, ranges: [{ start: position, end }] });
+		}
+		for (const child of node?.children ?? []) visit(child);
+	};
+	visit(ast);
+const result = [];
+	for (const { position, ranges } of nodes.values()) {
+		const value = await evaluator.evaluateAtPosition(filePathFromUri(document.uri), document.getText(), evaluationRoot(document.uri), position);
+		if (value) result.push(...ranges);
+	}
+	return result;
+}
 
 connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 	try {
