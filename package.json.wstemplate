@@ -19,6 +19,12 @@
     "engines": {
         "vscode": "^1.97.0"
     },
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": "limited",
+            "description": "Parsing, diagnostics, completion, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, and dependency graphs require a trusted workspace."
+        }
+    },
     "main": "./dist/extension.js",
     "icon": "./icon.png",
     "contributes": {
@@ -33,14 +39,14 @@
             "editor/context": [
                 {
                     "command": "terragrunt.dependencyTree",
-                    "when": "editorLangId == terragrunt",
+                    "when": "editorLangId == terragrunt && isWorkspaceTrusted",
                     "group": "terragrunt@2"
                 }
             ],
             "commandPalette": [
                 {
                     "command": "terragrunt.dependencyTree",
-                    "when": "editorLangId == terragrunt"
+                    "when": "editorLangId == terragrunt && isWorkspaceTrusted"
                 }
             ]
         },

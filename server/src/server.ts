@@ -47,6 +47,7 @@ interface SerializedGraphNode {
 }
 
 let workspaceFolder: string | null;
+let workspaceTrusted = false;
 
 const evaluator = new ConfigEvaluator({
 	environmentVariables: Object.fromEntries(
@@ -54,6 +55,7 @@ const evaluator = new ConfigEvaluator({
 	),
 	terraformCommand: '',
 	terraformCliArgs: [],
+	workspaceTrusted: false,
 	resolveDependency: async (configPath, name) => {
 		const dependencies = await workspace.getDependencies(pathToFileURL(configPath).toString());
 		const dependency = dependencies.find(candidate => candidate.parameterValue === name);
@@ -97,6 +99,9 @@ function valueMarkdown(value: RuntimeValue<ValueType>): string {
 }
 
 async function evaluateDocument(uri: string, content: string) {
+	if (!workspaceTrusted) {
+		return { valid: false, inputs: null, error: 'Semantic evaluation is disabled until the workspace is trusted' };
+	}
 	return evaluator.evaluateUnit(filePathFromUri(uri), content, evaluationRoot(uri));
 }
 
@@ -140,6 +145,9 @@ async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>
 
 connection.onInitialize((params: InitializeParams) => {
 	workspaceFolder = params.rootUri;
+	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown } | undefined;
+	workspaceTrusted = initializationOptions?.isWorkspaceTrusted === true;
+	evaluator.setWorkspaceTrusted(workspaceTrusted);
 	if (workspaceFolder) {
 		workspace.setWorkspaceRoot(workspaceFolder);
 	}
@@ -165,8 +173,19 @@ connection.onInitialize((params: InitializeParams) => {
 	};
 });
 
+connection.onNotification('terragrunt/workspaceTrustChanged', (params: { isTrusted: boolean }) => {
+	workspaceTrusted = params.isTrusted === true;
+	evaluator.setWorkspaceTrusted(workspaceTrusted);
+});
+
 connection.onExecuteCommand(async (params) => {
 	if (params.command === 'terragrunt.dependencyTree') {
+		if (!workspaceTrusted) {
+			connection.sendNotification('terragrunt/dependencyTreeResult', {
+				result: 'The dependency graph is disabled until the workspace is trusted.'
+			});
+			return;
+		}
 		connection.sendNotification('terragrunt/dependencyTreeStatus', { message: 'Building the Terragrunt graph…' });
 		try {
 			const rootNode = await workspace.refreshDependencyTree();
@@ -218,12 +237,12 @@ connection.onHover(async (params) => {
 		}
 
 		const hoverResult = await parsedDocument.getHoverInfo(params.position);
-		const evaluated = await evaluator.evaluateAtPosition(
+		const evaluated = workspaceTrusted ? await evaluator.evaluateAtPosition(
 			filePathFromUri(document.uri),
 			document.getText(),
 			evaluationRoot(document.uri),
 			params.position
-		);
+		) : undefined;
 		if (!hoverResult && !evaluated) {
 			return null;
 		}

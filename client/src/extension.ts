@@ -47,6 +47,7 @@ function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 
 function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
 	return {
+		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted },
 		documentSelector: folder
 			? [{ scheme: 'file', language: 'terragrunt', pattern: `${folder.uri.fsPath}/**/*.hcl` }]
 			: [
@@ -119,6 +120,11 @@ export function activate(context: ExtensionContext) {
 	}
 
 	context.subscriptions.push(Workspace.onDidOpenTextDocument(didOpenTextDocument));
+	context.subscriptions.push(Workspace.onDidGrantWorkspaceTrust(() => {
+		for (const client of [defaultClient, ...clients.values()]) {
+			client?.sendNotification('terragrunt/workspaceTrustChanged', { isTrusted: true });
+		}
+	}));
 	context.subscriptions.push(Workspace.onDidChangeWorkspaceFolders(() => {
 		_sortedWorkspaceFolders = undefined;
 	}));
