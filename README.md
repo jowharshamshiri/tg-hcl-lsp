@@ -66,6 +66,21 @@ npm run watch
 
 Launch the repository as a VS Code Extension Development Host after bundling it. Test completion, diagnostics, hover, and document links with current Terragrunt HCL files. Run **Show Terragrunt Lineage Graph** from the Command Palette while an HCL editor is active to inspect includes, dependencies, stacks, and reading lineage.
 
+## Thanks
+
+Thanks to everyone who has reported issues, tested, and contributed feedback:
+
+- [and-win](https://github.com/and-win)
+- [rtizzy](https://github.com/rtizzy)
+- [lucalooz](https://github.com/lucalooz)
+- [gsouf](https://github.com/gsouf)
+- [jonath92](https://github.com/jonath92)
+- [mateothegreat](https://github.com/mateothegreat)
+- [prestonr83](https://github.com/prestonr83)
+- [jimweller](https://github.com/jimweller)
+- [AntonSedna](https://github.com/AntonSedna)
+- [vizorich](https://github.com/vizorich)
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
