@@ -1,3 +1,9 @@
+[![Version](https://vsmarketplacebadges.dev/version/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
+
+[![Installs](https://vsmarketplacebadges.dev/installs/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
+
+[![Rating](https://vsmarketplacebadges.dev/rating/BahramJoharshamshiri.hcl-lsp.svg)](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp)
+
 # Terragrunt HCL Language Server
 
 Rich, context-aware editor support for the Terragrunt 1.x configuration model — completions, validation, hover docs, clickable navigation, and a visual lineage graph.
