@@ -4,7 +4,6 @@ import {
 	ProposedFeatures,
 	TextDocumentSyncKind,
 	CompletionItem,
-	TextDocumentChangeEvent,
 	InitializeParams,
 	DiagnosticSeverity,
 	MarkupKind
@@ -79,7 +78,15 @@ function filePathFromUri(uri: string): string {
 }
 
 function evaluationRoot(uri: string): string {
-	if (workspaceFolder?.startsWith('file:')) return filePathFromUri(workspaceFolder);
+	if (workspaceFolder?.startsWith('file:')) {
+		const root = filePathFromUri(workspaceFolder);
+		try {
+			if (fs.statSync(root).isFile()) return path.dirname(root);
+		} catch {
+			return path.dirname(root);
+		}
+		return root;
+	}
 	return path.dirname(filePathFromUri(uri));
 }
 
@@ -105,9 +112,8 @@ async function evaluateDocument(uri: string, content: string) {
 	return evaluator.evaluateUnit(filePathFromUri(uri), content, evaluationRoot(uri));
 }
 
-async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>) {
+async function handleDocumentChange(document: TextDocument) {
 	try {
-		const document = event.document;
 		const parsedDocument = new ParsedDocument(workspace, document.uri, document.getText());
 		parsedDocuments.set(document.uri, parsedDocument);
 
@@ -131,7 +137,7 @@ async function handleDocumentChange(event: TextDocumentChangeEvent<TextDocument>
 			`[Server(${process.pid}) ${workspaceFolder}] Error handling document change: ${error}`
 		);
 		connection.sendDiagnostics({
-			uri: event.document.uri,
+			uri: document.uri,
 			diagnostics: [{
 				severity: 1,
 				range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
@@ -176,6 +182,9 @@ connection.onInitialize((params: InitializeParams) => {
 connection.onNotification('terragrunt/workspaceTrustChanged', (params: { isTrusted: boolean }) => {
 	workspaceTrusted = params.isTrusted === true;
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
+	if (workspaceTrusted) {
+		void Promise.all(documents.all().map(document => handleDocumentChange(document)));
+	}
 });
 
 connection.onExecuteCommand(async (params) => {
@@ -268,6 +277,7 @@ connection.onHover(async (params) => {
 });
 
 async function evaluatableRanges(ast: any, document: TextDocument): Promise<Array<{ start: { line: number; character: number }; end: { line: number; character: number } }>> {
+	if (!workspaceTrusted) return [];
 	const nodes = new Map<string, { position: { line: number; character: number }; ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> }>();
 	const visit = (node: any): void => {
 		const location = node?.location;
@@ -306,9 +316,10 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 			return [];
 		}
 
-		const parsedDocument = parsedDocuments.get(document.uri);
+		let parsedDocument = parsedDocuments.get(document.uri);
 		if (!parsedDocument) {
-			return [];
+			parsedDocument = new ParsedDocument(workspace, document.uri, document.getText());
+			parsedDocuments.set(document.uri, parsedDocument);
 		}
 
 		const result = parsedDocument.getCompletionsAtPosition(params.position);
@@ -345,11 +356,11 @@ connection.onDocumentLinks(async (params) => {
 
 // Handle document events
 documents.onDidOpen(async (event) => {
-	await handleDocumentChange(event);
+	await handleDocumentChange(event.document);
 });
 
 documents.onDidChangeContent(async (event) => {
-	await handleDocumentChange(event);
+	await handleDocumentChange(event.document);
 });
 
 documents.onDidClose((event) => {
