@@ -9,6 +9,7 @@ lerna-debug.log*
 
 # dependencies
 out
+*.tsbuildinfo
 node_modules
 operation-lock.json
 yarn.lock
@@ -18,6 +19,7 @@ dist
 dist-ssr
 coverage
 *.local
+*.vsix
 
 /cypress/videos/
 /cypress/screenshots/

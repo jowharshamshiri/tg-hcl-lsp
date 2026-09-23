@@ -13,7 +13,7 @@
 		"url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
 	},
 	"dependencies": {
-		"tghclparser": "file:../../tghclparser",
+		"tghclparser": "^1.164.1117",
         "vscode-languageserver": "^10.1.0",
 		"vscode-languageserver-textdocument": "^1.0.12"
 	},

@@ -76,6 +76,8 @@
         "webpack": "webpack --fail-on-warnings",
         "watch": "cross-env BUILD_MODE=development webpack --watch --stats detailed",
         "lint": "eslint",
+        "lint:ci": "eslint --max-warnings 0",
+        "package": "vsce package --no-dependencies --out hcl-lsp.vsix",
         "dev": "npm run watch"
     },
     "devDependencies": {

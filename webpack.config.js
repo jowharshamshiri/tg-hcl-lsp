@@ -7,11 +7,9 @@ const webpack = require('webpack');
 dotenv.config();
 const mode = process.env.BUILD_MODE || 'production';
 const isDevelopment = mode === 'development';
-const parserBundlePath = path.resolve(__dirname, '../tghclparser/dist/index.cjs');
-
-if (!fs.existsSync(parserBundlePath)) {
-  throw new Error(`Parser bundle not found: ${parserBundlePath}. Build tghclparser before bundling the extension.`);
-}
+const parserBundlePath = require.resolve('tghclparser', {
+  paths: [path.resolve(__dirname, 'server')]
+});
 
 const parserBundleHash = crypto
   .createHash('sha256')
