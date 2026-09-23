@@ -48,6 +48,33 @@ interface SerializedGraphNode {
 let workspaceFolder: string | null;
 let workspaceTrusted = false;
 
+type EvaluatableRangeMode = 'off' | 'referencesOnly' | 'all';
+
+let evaluatableRangeMode: EvaluatableRangeMode = 'referencesOnly';
+
+// Expressions whose evaluated value is not apparent from the source text.
+const REFERENCE_NODE_TYPES = new Set([
+	'function_call',
+	'reference',
+	'local_reference',
+	'dependency_reference',
+	'terraform_reference',
+	'interpolated_string',
+	'ternary_expression'
+]);
+
+// Literals evaluate to themselves, so they are only marked in 'all'.
+const LITERAL_NODE_TYPES = new Set([
+	'string_lit',
+	'number_lit',
+	'boolean_lit',
+	'null_lit'
+]);
+
+function parseEvaluatableRangeMode(value: unknown): EvaluatableRangeMode {
+	return value === 'off' || value === 'referencesOnly' || value === 'all' ? value : 'referencesOnly';
+}
+
 const evaluator = new ConfigEvaluator({
 	environmentVariables: Object.fromEntries(
 		Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
@@ -151,8 +178,12 @@ async function handleDocumentChange(document: TextDocument) {
 
 connection.onInitialize((params: InitializeParams) => {
 	workspaceFolder = params.rootUri;
-	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown } | undefined;
+	const initializationOptions = params.initializationOptions as {
+		isWorkspaceTrusted?: unknown;
+		evaluatableRanges?: unknown;
+	} | undefined;
 	workspaceTrusted = initializationOptions?.isWorkspaceTrusted === true;
+	evaluatableRangeMode = parseEvaluatableRangeMode(initializationOptions?.evaluatableRanges);
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
 	if (workspaceFolder) {
 		workspace.setWorkspaceRoot(workspaceFolder);
@@ -185,6 +216,22 @@ connection.onNotification('terragrunt/workspaceTrustChanged', (params: { isTrust
 	if (workspaceTrusted) {
 		void Promise.all(documents.all().map(document => handleDocumentChange(document)));
 	}
+});
+
+connection.onDidChangeConfiguration((params) => {
+	const settings = params.settings as { terragrunt?: { evaluatableRanges?: unknown } } | undefined;
+	const mode = parseEvaluatableRangeMode(settings?.terragrunt?.evaluatableRanges);
+	if (mode === evaluatableRangeMode) return;
+	evaluatableRangeMode = mode;
+	// Republish ranges for open documents so the new mode takes effect without an edit.
+	void Promise.all(documents.all().map(async document => {
+		const parsedDocument = parsedDocuments.get(document.uri);
+		if (!parsedDocument) return;
+		connection.sendNotification('terragrunt/evaluatableRanges', {
+			uri: document.uri,
+			ranges: await evaluatableRanges(parsedDocument.getAST(), document)
+		});
+	}));
 });
 
 connection.onExecuteCommand(async (params) => {
@@ -277,11 +324,12 @@ connection.onHover(async (params) => {
 });
 
 async function evaluatableRanges(ast: any, document: TextDocument): Promise<Array<{ start: { line: number; character: number }; end: { line: number; character: number } }>> {
-	if (!workspaceTrusted) return [];
+	if (!workspaceTrusted || evaluatableRangeMode === 'off') return [];
+	const markLiterals = evaluatableRangeMode === 'all';
 	const nodes = new Map<string, { position: { line: number; character: number }; ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> }>();
 	const visit = (node: any): void => {
 		const location = node?.location;
-		if (node?.type === 'attribute' && location) {
+		if (markLiterals && node?.type === 'attribute' && location) {
 			const identifier = node.children?.find((child: any) => child.type === 'attribute_identifier');
 			const value = node.children?.find((child: any) => child.type !== 'attribute_identifier');
 			if (identifier?.location && value?.location) {
@@ -293,7 +341,7 @@ async function evaluatableRanges(ast: any, document: TextDocument): Promise<Arra
 				nodes.set(`key:${identifier.location.start.offset}:${identifier.location.end.offset}`, { position, ranges: [keyRange] });
 			}
 		}
-		if (location && ['function_call', 'reference', 'local_reference', 'dependency_reference', 'terraform_reference', 'interpolated_string', 'ternary_expression', 'string_lit', 'number_lit', 'boolean_lit', 'null_lit'].includes(node.type)) {
+		if (location && (REFERENCE_NODE_TYPES.has(node.type) || (markLiterals && LITERAL_NODE_TYPES.has(node.type)))) {
 			const position = document.positionAt(location.start.offset);
 			const end = document.positionAt(location.end.offset);
 			nodes.set(`${location.start.offset}:${location.end.offset}`, { position, ranges: [{ start: position, end }] });
@@ -301,7 +349,7 @@ async function evaluatableRanges(ast: any, document: TextDocument): Promise<Arra
 		for (const child of node?.children ?? []) visit(child);
 	};
 	visit(ast);
-const result = [];
+	const result = [];
 	for (const { position, ranges } of nodes.values()) {
 		const value = await evaluator.evaluateAtPosition(filePathFromUri(document.uri), document.getText(), evaluationRoot(document.uri), position);
 		if (value) result.push(...ranges);

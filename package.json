@@ -28,6 +28,26 @@
     "main": "./dist/extension.js",
     "icon": "./icon.png",
     "contributes": {
+        "configuration": {
+            "title": "Terragrunt",
+            "properties": {
+                "terragrunt.evaluatableRanges": {
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "referencesOnly",
+                        "all"
+                    ],
+                    "enumDescriptions": [
+                        "Do not mark evaluatable expressions.",
+                        "Mark references, function calls, and interpolated strings.",
+                        "Mark every evaluatable expression, including plain literals and attribute names."
+                    ],
+                    "default": "referencesOnly",
+                    "markdownDescription": "Underline expressions whose value the language server can resolve, so hovering them shows the evaluated result. Requires a trusted workspace."
+                }
+            }
+        },
         "commands": [
             {
                 "command": "terragrunt.dependencyTree",
