@@ -291,9 +291,14 @@ async function publishEvaluatableRanges(document: TextDocument) {
 	// Documents are updated in place, so an edit or close while the file was evaluated leaves these offsets stale.
 	// The newer text publishes its own ranges.
 	if (documents.get(uri)?.version !== version) return;
+	// Only expressions are marked. An attribute name's value is the one of the expression beside it, so marking both
+	// would mark every value twice; names still answer hovers from the full set of spans.
 	connection.sendNotification('terragrunt/evaluatableRanges', {
 		uri,
-		ranges: spans.map(span => ({ start: document.positionAt(span.start), end: document.positionAt(span.end) }))
+		version,
+		ranges: spans
+			.filter(span => span.kind === 'expression')
+			.map(span => ({ start: document.positionAt(span.start), end: document.positionAt(span.end) }))
 	});
 }
 
