@@ -44,12 +44,8 @@ jobs:
           node-version: 22
           cache: npm
 
-      # The client and server are separate packages with their own lockfiles, not npm workspaces.
       - name: Install dependencies
-        run: |
-          npm ci
-          npm ci --prefix client
-          npm ci --prefix server
+        run: npm ci
 
       - name: Bundle
         run: npm run webpack

@@ -28,16 +28,24 @@ const commonPlugins = [
   })
 ];
 
-const configureResolve = (languageServerTypesRoot, aliases = {}) => {
+// The package resolves to its UMD build by default; webpack needs the ESM one. Its "exports" map exposes only
+// the entry point, so walk up from there to the package root rather than resolving the subpath directly.
+const languageServerTypesEsm = (from) => {
+  let dir = path.dirname(require.resolve('vscode-languageserver-types', {
+    paths: [path.resolve(__dirname, from), __dirname]
+  }));
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    dir = path.dirname(dir);
+  }
+  return path.join(dir, 'lib/esm/main.js');
+};
+
+const configureResolve = (languageServerTypesFrom, aliases = {}) => {
   return {
     extensions: [".ts", ".js"],
     symlinks: true,
     alias: {
-      'vscode-languageserver-types$': path.resolve(
-        __dirname,
-        languageServerTypesRoot,
-        'lib/esm/main.js'
-      ),
+      'vscode-languageserver-types$': languageServerTypesEsm(languageServerTypesFrom),
       ...aliases
     }
   };
