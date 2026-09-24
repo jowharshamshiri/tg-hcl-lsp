@@ -45,17 +45,9 @@ function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 	return folder;
 }
 
-function evaluatableRangeMode(folder?: WorkspaceFolder): string {
-	return Workspace.getConfiguration('terragrunt', folder?.uri).get<string>('evaluatableRanges', 'referencesOnly');
-}
-
 function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
 	return {
-		initializationOptions: {
-			isWorkspaceTrusted: Workspace.isTrusted,
-			evaluatableRanges: evaluatableRangeMode(folder)
-		},
-		synchronize: { configurationSection: 'terragrunt' },
+		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted },
 		documentSelector: folder
 			? [{ scheme: 'file', language: 'terragrunt', pattern: `${folder.uri.fsPath}/**/*.hcl` }]
 			: [
@@ -135,14 +127,6 @@ export function activate(context: ExtensionContext) {
 	}));
 	context.subscriptions.push(Workspace.onDidChangeWorkspaceFolders(() => {
 		_sortedWorkspaceFolders = undefined;
-	}));
-	context.subscriptions.push(Workspace.onDidChangeConfiguration((event) => {
-		if (!event.affectsConfiguration('terragrunt.evaluatableRanges')) return;
-		// Clear immediately so turning the marks off does not leave stale decorations
-		// behind in editors the server has no reason to send ranges for.
-		for (const editor of Window.visibleTextEditors) {
-			editor.setDecorations(evaluatableDecoration, []);
-		}
 	}));
 	Workspace.textDocuments.forEach(didOpenTextDocument);
 	context.subscriptions.push(Workspace.onDidChangeWorkspaceFolders((event) => {
