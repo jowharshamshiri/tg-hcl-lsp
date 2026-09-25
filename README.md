@@ -19,6 +19,7 @@ Install **Terragrunt Language Server** from the [VS Code Marketplace](https://ma
 - **Context-aware completions** for blocks, attributes, functions, locals, dependencies, includes, features, values, units, and stacks
 - **File-kind-aware validation** that knows the difference between a unit, an explicit stack, a values file, and an autoinclude — with current-regime diagnostics that flag removed and deprecated syntax
 - **Hover documentation** and **clickable document links** for includes, dependencies, and read files
+- **Evaluated values** on hover, with the expressions that have one underlined — see [Settings](#settings)
 - **Show Terragrunt Lineage Graph** — a visual, interactive graph of the whole workspace covering includes, dependencies, units, nested stacks, and reading lineage, with dependency outputs surfaced from state
 - **Syntax highlighting** for Terragrunt blocks, attributes, references, and functions
 
@@ -36,6 +37,18 @@ The lineage graph opens with the first two levels visible, provides filter and e
 1. Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp).
 2. Open any `.hcl` file in a Terragrunt workspace — completions, validation, hover, and links work immediately.
 3. Run **Show Terragrunt Lineage Graph** from the Command Palette while an HCL editor is active to see how the units in your workspace include, depend on, and read each other.
+
+## Settings
+
+### `terragrunt.evaluatedValues.underline`
+
+Hovering an expression shows the value it evaluates to. A dotted underline marks the expressions that have one, and this setting decides which of those are drawn.
+
+| Value | Underlines
+| --- | ---
+| `cursorLine` (default) | the expressions on the lines that have a cursor
+| `always` | every evaluated expression in the file
+| `off` | nothing — hovering still shows the value
 
 ## Terragrunt 1.x first
 
