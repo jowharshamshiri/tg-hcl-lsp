@@ -17,7 +17,7 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 import { ConfigEvaluator, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
-import type { RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
+import type { EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -128,10 +128,7 @@ async function handleDocumentChange(document: TextDocument) {
 			uri: document.uri,
 			diagnostics
 		});
-		connection.sendNotification('terragrunt/evaluatableRanges', {
-			uri: document.uri,
-			ranges: await evaluatableRanges(parsedDocument.getAST(), document)
-		});
+		await publishEvaluatableRanges(document);
 	} catch (error) {
 		connection.console.error(
 			`[Server(${process.pid}) ${workspaceFolder}] Error handling document change: ${error}`
@@ -246,12 +243,7 @@ connection.onHover(async (params) => {
 		}
 
 		const hoverResult = await parsedDocument.getHoverInfo(params.position);
-		const evaluated = workspaceTrusted ? await evaluator.evaluateAtPosition(
-			filePathFromUri(document.uri),
-			document.getText(),
-			evaluationRoot(document.uri),
-			params.position
-		) : undefined;
+		const evaluated = narrowestSpanAt(await evaluatedSpans(document), document.offsetAt(params.position))?.value;
 		if (!hoverResult && !evaluated) {
 			return null;
 		}
@@ -276,37 +268,38 @@ connection.onHover(async (params) => {
 	}
 });
 
-async function evaluatableRanges(ast: any, document: TextDocument): Promise<Array<{ start: { line: number; character: number }; end: { line: number; character: number } }>> {
+// The spans whose values are worth revealing: literals that already read as their value are left out by the evaluator.
+async function evaluatedSpans(document: TextDocument): Promise<EvaluatedSpan[]> {
 	if (!workspaceTrusted) return [];
-	const nodes = new Map<string, { position: { line: number; character: number }; ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> }>();
-	const visit = (node: any): void => {
-		const location = node?.location;
-		if (node?.type === 'attribute' && location) {
-			const identifier = node.children?.find((child: any) => child.type === 'attribute_identifier');
-			const value = node.children?.find((child: any) => child.type !== 'attribute_identifier');
-			if (identifier?.location && value?.location) {
-				const position = document.positionAt(value.location.start.offset);
-				const keyRange = {
-					start: document.positionAt(identifier.location.start.offset),
-					end: document.positionAt(identifier.location.end.offset)
-				};
-				nodes.set(`key:${identifier.location.start.offset}:${identifier.location.end.offset}`, { position, ranges: [keyRange] });
-			}
+	return evaluator.evaluatedSpans(filePathFromUri(document.uri), document.getText(), evaluationRoot(document.uri));
+}
+
+// The narrowest span under the cursor, so a hover shows the value its underline stands for.
+function narrowestSpanAt(spans: EvaluatedSpan[], offset: number): EvaluatedSpan | undefined {
+	let narrowest: EvaluatedSpan | undefined;
+	for (const span of spans) {
+		if (span.start <= offset && offset < span.end && (!narrowest || span.end - span.start < narrowest.end - narrowest.start)) {
+			narrowest = span;
 		}
-		if (location && ['function_call', 'reference', 'local_reference', 'dependency_reference', 'terraform_reference', 'interpolated_string', 'ternary_expression', 'string_lit', 'number_lit', 'boolean_lit', 'null_lit'].includes(node.type)) {
-			const position = document.positionAt(location.start.offset);
-			const end = document.positionAt(location.end.offset);
-			nodes.set(`${location.start.offset}:${location.end.offset}`, { position, ranges: [{ start: position, end }] });
-		}
-		for (const child of node?.children ?? []) visit(child);
-	};
-	visit(ast);
-const result = [];
-	for (const { position, ranges } of nodes.values()) {
-		const value = await evaluator.evaluateAtPosition(filePathFromUri(document.uri), document.getText(), evaluationRoot(document.uri), position);
-		if (value) result.push(...ranges);
 	}
-	return result;
+	return narrowest;
+}
+
+async function publishEvaluatableRanges(document: TextDocument) {
+	const { uri, version } = document;
+	const spans = await evaluatedSpans(document);
+	// Documents are updated in place, so an edit or close while the file was evaluated leaves these offsets stale.
+	// The newer text publishes its own ranges.
+	if (documents.get(uri)?.version !== version) return;
+	// Only expressions are marked. An attribute name's value is the one of the expression beside it, so marking both
+	// would mark every value twice; names still answer hovers from the full set of spans.
+	connection.sendNotification('terragrunt/evaluatableRanges', {
+		uri,
+		version,
+		ranges: spans
+			.filter(span => span.kind === 'expression')
+			.map(span => ({ start: document.positionAt(span.start), end: document.positionAt(span.end) }))
+	});
 }
 
 connection.onCompletion(async (params): Promise<CompletionItem[]> => {

@@ -4,7 +4,7 @@
     "description": "VSCode extension for Terragrunt HCL language support",
     "author": "Bahram Shamshiri",
     "license": "MIT",
-    "version": "1.76.531",
+    "version": "1.88.601",
     "repository": {
         "type": "git",
         "url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
@@ -28,6 +28,27 @@
     "main": "./dist/extension.js",
     "icon": "./icon.png",
     "contributes": {
+        "configuration": {
+            "title": "Terragrunt",
+            "properties": {
+                "terragrunt.evaluatedValues.underline": {
+                    "type": "string",
+                    "scope": "window",
+                    "enum": [
+                        "cursorLine",
+                        "always",
+                        "off"
+                    ],
+                    "enumDescriptions": [
+                        "Underline the evaluated expressions on the lines that have a cursor.",
+                        "Underline every evaluated expression in the file.",
+                        "Underline nothing. Hovering an expression still shows its value."
+                    ],
+                    "default": "cursorLine",
+                    "markdownDescription": "Which expressions to underline among those whose hover shows an evaluated value. An expression is included only when its value is not already written in the source: a reference, a function call, an interpolation or an operator, never a plain literal. Requires a trusted workspace."
+                }
+            }
+        },
         "commands": [
             {
                 "command": "terragrunt.dependencyTree",
