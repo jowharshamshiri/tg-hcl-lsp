@@ -28,24 +28,35 @@ const commonPlugins = [
   })
 ];
 
-// The package resolves to its UMD build by default; webpack needs the ESM one. Its "exports" map exposes only
-// the entry point, so walk up from there to the package root rather than resolving the subpath directly.
-const languageServerTypesEsm = (from) => {
-  let dir = path.dirname(require.resolve('vscode-languageserver-types', {
-    paths: [path.resolve(__dirname, from), __dirname]
-  }));
+// The directory holding the package.json of the package that `entry` belongs to. Packages' "exports" maps
+// expose only their entry points, so a package root is found by walking up from one.
+const packageRoot = (entry) => {
+  let dir = path.dirname(entry);
   while (!fs.existsSync(path.join(dir, 'package.json'))) {
-    dir = path.dirname(dir);
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error(`No package.json above ${entry}`);
+    dir = parent;
   }
-  return path.join(dir, 'lib/esm/main.js');
+  return dir;
 };
 
-const configureResolve = (languageServerTypesFrom, aliases = {}) => {
+// vscode-languageserver-types resolves to its UMD build by default; webpack needs the ESM one. The client and the
+// server each bundle the version their own protocol package depends on -- vscode-languageclient and
+// vscode-languageserver pin different ones -- so it is resolved through that protocol package. Resolving it from
+// the client or server directory would find whichever version npm hoisted to the root, for both.
+const languageServerTypesEsm = (side, library) => {
+  const libraryRoot = packageRoot(require.resolve(library, { paths: [path.resolve(__dirname, side)] }));
+  const protocolRoot = packageRoot(require.resolve('vscode-languageserver-protocol/node', { paths: [libraryRoot] }));
+  const typesRoot = packageRoot(require.resolve('vscode-languageserver-types', { paths: [protocolRoot] }));
+  return path.join(typesRoot, 'lib/esm/main.js');
+};
+
+const configureResolve = (languageServerTypes, aliases = {}) => {
   return {
     extensions: [".ts", ".js"],
     symlinks: true,
     alias: {
-      'vscode-languageserver-types$': languageServerTypesEsm(languageServerTypesFrom),
+      'vscode-languageserver-types$': languageServerTypes,
       ...aliases
     }
   };
@@ -66,7 +77,7 @@ const clientConfig = {
   },
   devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
-  resolve: configureResolve('client/node_modules/vscode-languageserver-types'),
+  resolve: configureResolve(languageServerTypesEsm('client', 'vscode-languageclient/node')),
   watchOptions: isDevelopment ? {
     followSymlinks: true,
     ignored: /node_modules/
@@ -100,7 +111,7 @@ const serverConfig = {
   },
   devtool: isDevelopment ? 'source-map' : false,
   externals: configureExternals(),
-  resolve: configureResolve('server/node_modules/vscode-languageserver-types', {
+  resolve: configureResolve(languageServerTypesEsm('server', 'vscode-languageserver/node'), {
     'tghclparser$': parserBundlePath
   }),
   watchOptions: isDevelopment ? {
