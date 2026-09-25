@@ -4,7 +4,7 @@
     "description": "VSCode extension for Terragrunt HCL language support",
     "author": "Bahram Shamshiri",
     "license": "MIT",
-    "version": "1.82.584",
+    "version": "1.83.593",
     "repository": {
         "type": "git",
         "url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
@@ -110,6 +110,7 @@
         "cross-env": "^7.0.3",
         "dotenv": "^16.4.7",
         "eslint": "^9.39.0",
+        "eslint-formatter-gha": "2.0.1",
         "ts-loader": "^9.5.2",
         "typescript": "^5.9.0",
         "typescript-eslint": "^8.46.0",
