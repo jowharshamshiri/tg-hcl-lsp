@@ -121,8 +121,9 @@ Contributions are welcome — bug reports, feature ideas, and pull requests all 
 
 ## Thanks
 
-Thanks to everyone who has reported issues, tested, and contributed feedback:
+Thanks to everyone who contributed feedback, reported issues, submitted pull requests, tested changes, or otherwise helped improve the project:
 
+- [X-Guardian](https://github.com/X-Guardian)
 - [and-win](https://github.com/and-win)
 - [rtizzy](https://github.com/rtizzy)
 - [lucalooz](https://github.com/lucalooz)
