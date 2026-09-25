@@ -84,12 +84,10 @@ The implementation tracks the official Terragrunt [blocks](https://docs.terragru
 
 ## Development
 
-The client and server are separate packages with their own lockfiles, so each needs installing. Then create the extension bundle:
+Install dependencies and create the extension bundle:
 
 ```sh
 npm ci
-npm ci --prefix client
-npm ci --prefix server
 npm run webpack
 ```
 
@@ -101,12 +99,12 @@ npm run watch
 
 ### Testing against a local tghclparser
 
-The server depends on the published [tghclparser](https://www.npmjs.com/package/tghclparser) package. To build the extension against an unreleased parser — a local checkout beside this repository — point the server's copy at it:
+The server depends on the published [tghclparser](https://www.npmjs.com/package/tghclparser) package. To build against a local checkout beside this repository instead, point `node_modules` at it:
 
 ```sh
-cd server/node_modules
+cd node_modules
 rm -rf tghclparser
-ln -s ../../../tghclparser tghclparser
+ln -s ../../tghclparser tghclparser
 ```
 
 Build the parser first (`npm run build` in its checkout), since webpack bundles its `dist/index.cjs` rather than its sources. Rebuild it after any parser change.
@@ -114,7 +112,7 @@ Build the parser first (`npm run build` in its checkout), since webpack bundles 
 To go back to the published version:
 
 ```sh
-npm ci --prefix server
+npm ci
 ```
 
 Launch the repository as a VS Code Extension Development Host after bundling it. Test completion, diagnostics, hover, and document links with current Terragrunt HCL files, or open the lineage graph from the Command Palette while an HCL editor is active.

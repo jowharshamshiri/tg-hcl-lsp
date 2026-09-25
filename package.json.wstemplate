@@ -92,6 +92,10 @@
             }
         ]
     },
+    "workspaces": [
+        "client",
+        "server"
+    ],
     "scripts": {
         "vscode:prepublish": "cross-env BUILD_MODE=production webpack --fail-on-warnings",
         "webpack": "webpack --fail-on-warnings",
