@@ -17,7 +17,7 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 import { ConfigEvaluator, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
-import type { EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
+import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -55,16 +55,14 @@ const evaluator = new ConfigEvaluator({
 	terraformCommand: '',
 	terraformCliArgs: [],
 	workspaceTrusted: false,
-	resolveDependency: async (configPath, name) => {
-		const dependencies = await workspace.getDependencies(pathToFileURL(configPath).toString());
-		const dependency = dependencies.find(candidate => candidate.parameterValue === name);
-		if (!dependency) return undefined;
-		let outputs = dependency.outputs;
-		if (!outputs || outputs.size === 0) {
-			const dependencyDocument = await workspace.getParsedDocument(dependency.uri);
-			outputs = dependencyDocument ? await dependencyDocument.getAllOutputs() : undefined;
-		}
-		if (!outputs || outputs.size === 0) return undefined;
+	// The evaluator has found the dependency block in the unit's merged configuration and resolved config_path. Its
+	// outputs are the state outputs of the configuration the request names; one with none -- never applied, or
+	// state the server cannot read -- is unresolved, which is not reported as a problem.
+	resolveDependency: async request => {
+		const target = await workspace.getParsedDocument(pathToFileURL(request.targetConfigPath).toString());
+		if (!target) throw new Error(`dependency "${request.name}": ${request.targetConfigPath} could not be loaded`);
+		const outputs = await target.getAllOutputs();
+		if (outputs.size === 0) return undefined;
 		return {
 			type: 'object',
 			value: new Map([['outputs', { type: 'object', value: outputs }]])
@@ -105,10 +103,14 @@ function valueMarkdown(value: RuntimeValue<ValueType>): string {
 	return `\`\`\`json\n${JSON.stringify(plain, null, 2)}\n\`\`\``;
 }
 
-async function evaluateDocument(uri: string, content: string) {
+async function evaluateDocument(uri: string, content: string): Promise<ConfigEvaluationResult> {
 	if (!workspaceTrusted) {
 		return { valid: false, inputs: null, error: 'Semantic evaluation is disabled until the workspace is trusted' };
 	}
+	// Only a unit is evaluated for diagnostics. An included configuration such as root.hcl, evaluated on its own, has
+	// none of the context its units give it -- their directory, their dependency blocks -- so its failures there say
+	// nothing about the configuration Terragrunt runs.
+	if (path.basename(filePathFromUri(uri)) !== 'terragrunt.hcl') return { valid: true, inputs: null };
 	return evaluator.evaluateUnit(filePathFromUri(uri), content, evaluationRoot(uri));
 }
 
@@ -122,7 +124,9 @@ async function handleDocumentChange(document: TextDocument) {
 		const diagnostics = [...parsedDocument.getDiagnostics()];
 		if (diagnostics.every(diagnostic => diagnostic.severity !== DiagnosticSeverity.Error)) {
 			const evaluation = await evaluateDocument(document.uri, document.getText());
-			if (!evaluation.valid && evaluation.error) diagnostics.push(evaluationDiagnostic(evaluation.error));
+			// A value that cannot be known yet, such as a dependency never applied, is not a problem in the
+			// configuration, so it is not reported as one.
+			if (!evaluation.valid && evaluation.error && !evaluation.unresolved) diagnostics.push(evaluationDiagnostic(evaluation.error));
 		}
 		connection.sendDiagnostics({
 			uri: document.uri,
