@@ -8,12 +8,9 @@ import {
 	DiagnosticSeverity,
 	FileChangeType,
 	MarkupKind,
-	MessageType,
-	ShowMessageNotification,
 	TextEdit
 } from 'vscode-languageserver/node';
 
-import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -21,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { ConfigEvaluator, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
+import { ConfigEvaluator, formatHcl, HclSyntaxError, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
 import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -378,73 +375,25 @@ connection.onDocumentLinks(async (params) => {
     }
 });
 
-let formatArgs: Promise<string[]> | undefined;
-let reportedMissingTerragrunt = false;
-
-// Terragrunt 0.73 replaced hclfmt with hcl format, and 1.0 removed hclfmt.
-function terragruntFormatArgs(): Promise<string[]> {
-	formatArgs ??= new Promise((resolve, reject) => {
-		execFile('terragrunt', ['--version'], (error, stdout) => {
-			if (error) {
-				formatArgs = undefined;
-				reject(error);
-				return;
-			}
-			const [, major, minor] = /v?(\d+)\.(\d+)/.exec(stdout) ?? [];
-			const legacy = major !== undefined && Number(major) === 0 && Number(minor) < 73;
-			resolve(legacy ? ['hclfmt', '--terragrunt-hclfmt-stdin'] : ['hcl', 'format', '--stdin', '--no-color']);
-		});
-	});
-	return formatArgs;
-}
-
-// A formatter that hangs would otherwise be left running behind every save.
-const formatTimeoutMs = 10_000;
-
-function runTerragrunt(args: string[], input: string, cwd: string | undefined): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const child = spawn('terragrunt', args, { cwd, timeout: formatTimeoutMs });
-		let stdout = '';
-		let stderr = '';
-		child.stdout.setEncoding('utf8').on('data', (chunk: string) => stdout += chunk);
-		child.stderr.setEncoding('utf8').on('data', (chunk: string) => stderr += chunk);
-		child.on('error', reject);
-		child.on('close', (code, signal) => {
-			if (code === 0) resolve(stdout);
-			else if (signal) reject(new Error(`terragrunt was stopped by ${signal}; it is given ${formatTimeoutMs / 1000} seconds to format a file`));
-			else reject(new Error(stderr.trim() || `terragrunt exited with code ${code}`));
-		});
-		child.stdin.on('error', () => undefined);
-		child.stdin.end(input);
-	});
-}
-
-connection.onDocumentFormatting(async (params) => {
+// Formatting is the parser's own: the layout `terragrunt hcl format` produces, with no CLI to install or run. It
+// reads nothing but the text it is given, so it works in Restricted Mode too.
+connection.onDocumentFormatting((params) => {
 	const document = documents.get(params.textDocument.uri);
-	if (!document || !workspaceTrusted) {
+	if (!document) {
 		return null;
 	}
 	const text = document.getText();
 	try {
-		const cwd = document.uri.startsWith('file:') ? path.dirname(fileURLToPath(document.uri)) : undefined;
-		const formatted = await runTerragrunt(await terragruntFormatArgs(), text, cwd);
+		const formatted = formatHcl(text, document.uri);
 		if (formatted === text) {
 			return [];
 		}
 		return [TextEdit.replace({ start: document.positionAt(0), end: document.positionAt(text.length) }, formatted)];
 	} catch (error) {
-		// Every failure is written to the output channel. A missing CLI is also shown, once, since format on save
-		// would otherwise raise the same message on every save.
-		const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
-		connection.console.error(missing
-			? `Error formatting ${document.uri}: the terragrunt CLI is not on PATH`
-			: `Error formatting ${document.uri}: ${error instanceof Error ? error.message : error}`);
-		if (missing && !reportedMissingTerragrunt) {
-			reportedMissingTerragrunt = true;
-			// A notification, since the message offers no choice to wait for: a request that the client drops or
-			// refuses would reject with nothing to handle it.
-			void connection.sendNotification(ShowMessageNotification.type, { type: MessageType.Error, message: 'Formatting needs the terragrunt CLI on PATH.' });
-		}
+		// A file that does not parse is left as it is, as Terragrunt leaves it; the syntax error is already among
+		// its problems. Anything else is a defect and fails the request.
+		if (!(error instanceof HclSyntaxError)) throw error;
+		connection.console.error(`${document.uri} was not formatted: ${error.message}`);
 		return null;
 	}
 });
