@@ -1,6 +1,7 @@
 import * as path from 'path';
 import {
-	workspace as Workspace, window as Window, ExtensionContext, TextDocument, OutputChannel, WorkspaceFolder, Uri
+	workspace as Workspace, window as Window, ExtensionContext, TextDocument, OutputChannel, WorkspaceFolder, Uri,
+	FileSystemWatcher, RelativePattern
 } from 'vscode';
 
 import {
@@ -47,9 +48,17 @@ function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 	return folder;
 }
 
-function createClientOptions(outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
+function createClientOptions(context: ExtensionContext, outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
+	// The server clears the problems of a configuration deleted from disk, which VS Code leaves open in its editor.
+	// The client stops listening when it stops; the watcher itself lives until the extension is deactivated.
+	let fileEvents: FileSystemWatcher | undefined;
+	if (folder) {
+		fileEvents = Workspace.createFileSystemWatcher(new RelativePattern(folder, '**/*.hcl'), true, true, false);
+		context.subscriptions.push(fileEvents);
+	}
 	return {
 		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted },
+		synchronize: { fileEvents },
 		documentSelector: folder
 			? [{ scheme: 'file', language: 'terragrunt', pattern: `${folder.uri.fsPath}/**/*.hcl` }]
 			: [
@@ -87,7 +96,7 @@ export function activate(context: ExtensionContext) {
 				'tg-hcl-lsp',
 				'Terragrunt HCL Language Server',
 				serverOptions,
-				createClientOptions(outputChannel)
+				createClientOptions(context, outputChannel)
 			);
 			const client = defaultClient;
 			void startClient(client, context, outputChannel, () => {
@@ -110,7 +119,7 @@ export function activate(context: ExtensionContext) {
 				'tg-hcl-lsp',
 				'Terragrunt HCL Language Server',
 				serverOptions,
-				createClientOptions(outputChannel, folder)
+				createClientOptions(context, outputChannel, folder)
 			);
 			clients.set(folder.uri.toString(), client);
 			const folderUri = folder.uri.toString();
