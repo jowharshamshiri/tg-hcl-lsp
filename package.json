@@ -22,12 +22,17 @@
     "capabilities": {
         "untrustedWorkspaces": {
             "supported": "limited",
-            "description": "Parsing, diagnostics, completion, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, and dependency graphs require a trusted workspace."
+            "description": "Parsing, diagnostics, completion, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, formatting, and dependency graphs require a trusted workspace."
         }
     },
     "main": "./dist/extension.js",
     "icon": "./icon.png",
     "contributes": {
+        "configurationDefaults": {
+            "[terragrunt]": {
+                "editor.defaultFormatter": "bahramjoharshamshiri.hcl-lsp"
+            }
+        },
         "configuration": {
             "title": "Terragrunt",
             "properties": {
