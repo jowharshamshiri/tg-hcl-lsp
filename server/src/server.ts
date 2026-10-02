@@ -7,6 +7,8 @@ import {
 	InitializeParams,
 	DiagnosticSeverity,
 	MarkupKind,
+	MessageType,
+	ShowMessageNotification,
 	TextEdit
 } from 'vscode-languageserver/node';
 
@@ -374,15 +376,22 @@ function terragruntFormatArgs(): Promise<string[]> {
 	return formatArgs;
 }
 
+// A formatter that hangs would otherwise be left running behind every save.
+const formatTimeoutMs = 10_000;
+
 function runTerragrunt(args: string[], input: string, cwd: string | undefined): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const child = spawn('terragrunt', args, { cwd });
+		const child = spawn('terragrunt', args, { cwd, timeout: formatTimeoutMs });
 		let stdout = '';
 		let stderr = '';
 		child.stdout.setEncoding('utf8').on('data', (chunk: string) => stdout += chunk);
 		child.stderr.setEncoding('utf8').on('data', (chunk: string) => stderr += chunk);
 		child.on('error', reject);
-		child.on('close', code => code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || `terragrunt exited with code ${code}`)));
+		child.on('close', (code, signal) => {
+			if (code === 0) resolve(stdout);
+			else if (signal) reject(new Error(`terragrunt was stopped by ${signal}; it is given ${formatTimeoutMs / 1000} seconds to format a file`));
+			else reject(new Error(stderr.trim() || `terragrunt exited with code ${code}`));
+		});
 		child.stdin.on('error', () => undefined);
 		child.stdin.end(input);
 	});
@@ -402,13 +411,17 @@ connection.onDocumentFormatting(async (params) => {
 		}
 		return [TextEdit.replace({ start: document.positionAt(0), end: document.positionAt(text.length) }, formatted)];
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-			if (!reportedMissingTerragrunt) {
-				reportedMissingTerragrunt = true;
-				void connection.window.showErrorMessage('Formatting needs the terragrunt CLI on PATH.');
-			}
-		} else {
-			connection.console.error(`Error formatting ${document.uri}: ${error instanceof Error ? error.message : error}`);
+		// Every failure is written to the output channel. A missing CLI is also shown, once, since format on save
+		// would otherwise raise the same message on every save.
+		const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+		connection.console.error(missing
+			? `Error formatting ${document.uri}: the terragrunt CLI is not on PATH`
+			: `Error formatting ${document.uri}: ${error instanceof Error ? error.message : error}`);
+		if (missing && !reportedMissingTerragrunt) {
+			reportedMissingTerragrunt = true;
+			// A notification, since the message offers no choice to wait for: a request that the client drops or
+			// refuses would reject with nothing to handle it.
+			void connection.sendNotification(ShowMessageNotification.type, { type: MessageType.Error, message: 'Formatting needs the terragrunt CLI on PATH.' });
 		}
 		return null;
 	}
