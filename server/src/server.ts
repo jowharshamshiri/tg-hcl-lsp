@@ -6,9 +6,11 @@ import {
 	CompletionItem,
 	InitializeParams,
 	DiagnosticSeverity,
-	MarkupKind
+	MarkupKind,
+	TextEdit
 } from 'vscode-languageserver/node';
 
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -173,6 +175,7 @@ connection.onInitialize((params: InitializeParams) => {
 			documentLinkProvider: {
 				resolveProvider: true
 			},
+			documentFormattingProvider: true,
 			executeCommandProvider: {
 				commands: ['terragrunt.dependencyTree']
 			}
@@ -349,6 +352,66 @@ connection.onDocumentLinks(async (params) => {
         connection.console.error(`Error providing document links: ${error}`);
         return null;
     }
+});
+
+let formatArgs: Promise<string[]> | undefined;
+let reportedMissingTerragrunt = false;
+
+// Terragrunt 0.73 replaced hclfmt with hcl format, and 1.0 removed hclfmt.
+function terragruntFormatArgs(): Promise<string[]> {
+	formatArgs ??= new Promise((resolve, reject) => {
+		execFile('terragrunt', ['--version'], (error, stdout) => {
+			if (error) {
+				formatArgs = undefined;
+				reject(error);
+				return;
+			}
+			const [, major, minor] = /v?(\d+)\.(\d+)/.exec(stdout) ?? [];
+			const legacy = major !== undefined && Number(major) === 0 && Number(minor) < 73;
+			resolve(legacy ? ['hclfmt', '--terragrunt-hclfmt-stdin'] : ['hcl', 'format', '--stdin', '--no-color']);
+		});
+	});
+	return formatArgs;
+}
+
+function runTerragrunt(args: string[], input: string, cwd: string | undefined): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const child = spawn('terragrunt', args, { cwd });
+		let stdout = '';
+		let stderr = '';
+		child.stdout.setEncoding('utf8').on('data', (chunk: string) => stdout += chunk);
+		child.stderr.setEncoding('utf8').on('data', (chunk: string) => stderr += chunk);
+		child.on('error', reject);
+		child.on('close', code => code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || `terragrunt exited with code ${code}`)));
+		child.stdin.on('error', () => undefined);
+		child.stdin.end(input);
+	});
+}
+
+connection.onDocumentFormatting(async (params) => {
+	const document = documents.get(params.textDocument.uri);
+	if (!document || !workspaceTrusted) {
+		return null;
+	}
+	const text = document.getText();
+	try {
+		const cwd = document.uri.startsWith('file:') ? path.dirname(fileURLToPath(document.uri)) : undefined;
+		const formatted = await runTerragrunt(await terragruntFormatArgs(), text, cwd);
+		if (formatted === text) {
+			return [];
+		}
+		return [TextEdit.replace({ start: document.positionAt(0), end: document.positionAt(text.length) }, formatted)];
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+			if (!reportedMissingTerragrunt) {
+				reportedMissingTerragrunt = true;
+				void connection.window.showErrorMessage('Formatting needs the terragrunt CLI on PATH.');
+			}
+		} else {
+			connection.console.error(`Error formatting ${document.uri}: ${error instanceof Error ? error.message : error}`);
+		}
+		return null;
+	}
 });
 
 // Handle document events
