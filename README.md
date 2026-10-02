@@ -21,6 +21,7 @@ Install **Terragrunt Language Server** from the [VS Code Marketplace](https://ma
 - **Hover documentation** and **clickable document links** for includes, dependencies, and read files
 - **Evaluated values** on hover, with the expressions that have one underlined — see [Settings](#settings)
 - **Show Terragrunt Lineage Graph** — a visual, interactive graph of the whole workspace covering includes, dependencies, units, nested stacks, and reading lineage, with dependency outputs surfaced from state
+- **Formatting** with `terragrunt hcl format` — see [Formatting](#formatting)
 - **Syntax highlighting** for Terragrunt blocks, attributes, references, and functions
 
 The lineage graph opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. **Open** is shown only for files inside the active workspace.
@@ -37,6 +38,10 @@ The lineage graph opens with the first two levels visible, provides filter and e
 1. Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=BahramJoharshamshiri.hcl-lsp).
 2. Open any `.hcl` file in a Terragrunt workspace — completions, validation, hover, and links work immediately.
 3. Run **Show Terragrunt Lineage Graph** from the Command Palette while an HCL editor is active to see how the units in your workspace include, depend on, and read each other.
+
+## Formatting
+
+**Format Document** and format on save format Terragrunt files using Terragrunt's own formatter, so Terragrunt must be installed. Formatting works only in a trusted workspace. A file with a syntax error is not changed, and the error is shown in the `tg-hcl-lsp` output.
 
 ## Settings
 
