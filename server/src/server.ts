@@ -369,16 +369,17 @@ connection.onDocumentLinks(async (params) => {
     }
 });
 
+const terragruntTimeoutMs = 10_000;
 let formatArgs: Promise<string[]> | undefined;
 let reportedMissingTerragrunt = false;
 
 // Terragrunt 0.73 replaced hclfmt with hcl format, and 1.0 removed hclfmt.
 function terragruntFormatArgs(): Promise<string[]> {
 	formatArgs ??= new Promise((resolve, reject) => {
-		execFile('terragrunt', ['--version'], (error, stdout) => {
+		execFile('terragrunt', ['--version'], { timeout: terragruntTimeoutMs, killSignal: 'SIGKILL' }, (error, stdout) => {
 			if (error) {
 				formatArgs = undefined;
-				reject(error);
+				reject(error.killed ? new Error(`terragrunt --version did not finish within ${terragruntTimeoutMs} ms`) : error);
 				return;
 			}
 			const [, major, minor] = /v?(\d+)\.(\d+)/.exec(stdout) ?? [];
@@ -391,12 +392,20 @@ function terragruntFormatArgs(): Promise<string[]> {
 
 function runTerragrunt(args: string[], input: string, cwd: string | undefined): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const child = spawn('terragrunt', args, { cwd });
+		const child = spawn('terragrunt', args, { cwd, timeout: terragruntTimeoutMs, killSignal: 'SIGKILL' });
 		let stdout = '';
 		let stderr = '';
 		child.stdout.setEncoding('utf8').on('data', (chunk: string) => stdout += chunk);
 		child.stderr.setEncoding('utf8').on('data', (chunk: string) => stderr += chunk);
 		child.on('error', reject);
+		// A shim's own children can hold the pipes open after the timeout kills it, which would delay close.
+		child.on('exit', () => {
+			if (child.killed) {
+				child.stdout.destroy();
+				child.stderr.destroy();
+				reject(new Error(`terragrunt ${args.join(' ')} did not finish within ${terragruntTimeoutMs} ms`));
+			}
+		});
 		child.on('close', code => code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || `terragrunt exited with code ${code}`)));
 		child.stdin.on('error', () => undefined);
 		child.stdin.end(input);
