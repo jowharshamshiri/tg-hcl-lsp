@@ -384,7 +384,9 @@ connection.onDocumentFormatting((params) => {
 	}
 	const text = document.getText();
 	try {
-		const formatted = formatHcl(text, document.uri);
+		// The name is what a message that points back at an earlier part of the file calls it: its path, or its URI
+		// for a document that is not a file yet.
+		const formatted = formatHcl(text, document.uri.startsWith('file:') ? fileURLToPath(document.uri) : document.uri);
 		if (formatted === text) {
 			return [];
 		}
