@@ -7,7 +7,8 @@ import {
 	InitializeParams,
 	DiagnosticSeverity,
 	FileChangeType,
-	MarkupKind
+	MarkupKind,
+	TextEdit
 } from 'vscode-languageserver/node';
 
 import fs from 'node:fs';
@@ -17,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { ConfigEvaluator, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
+import { ConfigEvaluator, formatHcl, HclSyntaxError, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
 import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -115,23 +116,29 @@ async function evaluateDocument(uri: string, content: string): Promise<ConfigEva
 	return evaluator.evaluateUnit(filePathFromUri(uri), content, evaluationRoot(uri));
 }
 
-function isCurrent(document: TextDocument): boolean {
-	return documents.get(document.uri)?.version === document.version;
-}
+// The check whose result is a document's problems. Checking the document again, or forgetting it, retires the check
+// that was running, so a result that arrives late is not reported over what replaced it.
+const checks = new Map<string, object>();
 
 // Problems are only reported for open documents, and VS Code keeps a file's problems until they are replaced.
 function forgetDocument(uri: string) {
+	checks.delete(uri);
 	parsedDocuments.delete(uri);
 	workspace.removeDocument(uri);
 	connection.sendDiagnostics({ uri, diagnostics: [] });
 }
 
 async function handleDocumentChange(document: TextDocument) {
+	const check = {};
+	checks.set(document.uri, check);
+	const isCurrent = () => checks.get(document.uri) === check;
 	try {
 		const parsedDocument = new ParsedDocument(workspace, document.uri, document.getText());
 		parsedDocuments.set(document.uri, parsedDocument);
 
 		await workspace.addDocument(parsedDocument);
+		// A document forgotten while it was being added is not left behind in the workspace.
+		if (!checks.has(document.uri)) workspace.removeDocument(document.uri);
 
 		const diagnostics = [...parsedDocument.getDiagnostics()];
 		if (diagnostics.every(diagnostic => diagnostic.severity !== DiagnosticSeverity.Error)) {
@@ -140,8 +147,9 @@ async function handleDocumentChange(document: TextDocument) {
 			// configuration, so it is not reported as one.
 			if (!evaluation.valid && evaluation.error && !evaluation.unresolved) diagnostics.push(evaluationDiagnostic(evaluation.error));
 		}
-		// A document closed or edited while it was evaluated has had its problems cleared or is being checked again.
-		if (!isCurrent(document)) return;
+		// A document closed, deleted or edited while it was evaluated has had its problems cleared or is being
+		// checked again.
+		if (!isCurrent()) return;
 		connection.sendDiagnostics({
 			uri: document.uri,
 			diagnostics
@@ -151,7 +159,7 @@ async function handleDocumentChange(document: TextDocument) {
 		connection.console.error(
 			`[Server(${process.pid}) ${workspaceFolder}] Error handling document change: ${error}`
 		);
-		if (!isCurrent(document)) return;
+		if (!isCurrent()) return;
 		connection.sendDiagnostics({
 			uri: document.uri,
 			diagnostics: [{
@@ -188,6 +196,7 @@ connection.onInitialize((params: InitializeParams) => {
 			documentLinkProvider: {
 				resolveProvider: true
 			},
+			documentFormattingProvider: true,
 			executeCommandProvider: {
 				commands: ['terragrunt.dependencyTree']
 			}
@@ -366,6 +375,31 @@ connection.onDocumentLinks(async (params) => {
     }
 });
 
+// Formatting is the parser's own: the layout `terragrunt hcl format` produces, with no CLI to install or run. It
+// reads nothing but the text it is given, so it works in Restricted Mode too.
+connection.onDocumentFormatting((params) => {
+	const document = documents.get(params.textDocument.uri);
+	if (!document) {
+		return null;
+	}
+	const text = document.getText();
+	try {
+		// The name is what a message that points back at an earlier part of the file calls it: its path, or its URI
+		// for a document that is not a file yet.
+		const formatted = formatHcl(text, document.uri.startsWith('file:') ? fileURLToPath(document.uri) : document.uri);
+		if (formatted === text) {
+			return [];
+		}
+		return [TextEdit.replace({ start: document.positionAt(0), end: document.positionAt(text.length) }, formatted)];
+	} catch (error) {
+		// A file that does not parse is left as it is, as Terragrunt leaves it; the syntax error is already among
+		// its problems. Anything else is a defect and fails the request.
+		if (!(error instanceof HclSyntaxError)) throw error;
+		connection.console.error(`${document.uri} was not formatted: ${error.message}`);
+		return null;
+	}
+});
+
 // Handle document events
 documents.onDidOpen(async (event) => {
 	await handleDocumentChange(event.document);
@@ -379,10 +413,16 @@ documents.onDidClose((event) => {
 	forgetDocument(event.document.uri);
 });
 
-// A deleted file stays open in VS Code, marked as deleted, so no close arrives for it.
+// A deleted file stays open in VS Code, marked as deleted, so no close arrives for it. Deleting a folder is reported
+// once, for the folder, so every open document below it goes with it.
 connection.onDidChangeWatchedFiles((params) => {
 	for (const change of params.changes) {
-		if (change.type === FileChangeType.Deleted) forgetDocument(change.uri);
+		if (change.type !== FileChangeType.Deleted) continue;
+		const below = change.uri.endsWith('/') ? change.uri : `${change.uri}/`;
+		forgetDocument(change.uri);
+		for (const document of documents.all()) {
+			if (document.uri.startsWith(below)) forgetDocument(document.uri);
+		}
 	}
 });
 

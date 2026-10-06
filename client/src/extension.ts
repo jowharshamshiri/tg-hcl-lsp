@@ -50,10 +50,12 @@ function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 
 function createClientOptions(context: ExtensionContext, outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
 	// The server clears the problems of a configuration deleted from disk, which VS Code leaves open in its editor.
+	// Deleting a folder is reported for the folder alone, not for the files in it, so deletions of anything are
+	// watched and the server works out which open configurations went with it.
 	// The client stops listening when it stops; the watcher itself lives until the extension is deactivated.
 	let fileEvents: FileSystemWatcher | undefined;
 	if (folder) {
-		fileEvents = Workspace.createFileSystemWatcher(new RelativePattern(folder, '**/*.hcl'), true, true, false);
+		fileEvents = Workspace.createFileSystemWatcher(new RelativePattern(folder, '**'), true, true, false);
 		context.subscriptions.push(fileEvents);
 	}
 	return {
