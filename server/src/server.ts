@@ -4,6 +4,7 @@ import {
 	ProposedFeatures,
 	TextDocumentSyncKind,
 	CompletionItem,
+	CompletionItemKind,
 	InitializeParams,
 	DiagnosticSeverity,
 	FileChangeType,
@@ -191,7 +192,7 @@ connection.onInitialize((params: InitializeParams) => {
 			hoverProvider: true,
 			completionProvider: {
 				resolveProvider: false,
-				triggerCharacters: ['.', '=', ' ', '$', '{', '"']
+				triggerCharacters: ['.', '=', ' ', '$', '{', '"', '/']
 			},
 			documentLinkProvider: {
 				resolveProvider: true
@@ -343,9 +344,14 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 			parsedDocuments.set(document.uri, parsedDocument);
 		}
 
-		const result = parsedDocument.getCompletionsAtPosition(params.position);
+		const result = await parsedDocument.getCompletionsAtPosition(params.position);
 		if (!result) {
 			return [];
+		}
+
+		// '/' triggers only for path segments; elsewhere it is division and shouldn't pop up suggestions.
+		if (params.context?.triggerCharacter === '/') {
+			return result.filter(item => item.kind === CompletionItemKind.Folder);
 		}
 
 		return result;
@@ -368,7 +374,7 @@ connection.onDocumentLinks(async (params) => {
             return null;
         }
 
-		return parsedDocument.getLinks();
+		return await parsedDocument.getLinks();
     } catch (error) {
         connection.console.error(`Error providing document links: ${error}`);
         return null;
