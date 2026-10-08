@@ -94,6 +94,15 @@
                     "Terragrunt",
                     "HCL"
                 ]
+            },
+            {
+                "id": "hcl",
+                "filenames": [
+                    ".terraform.lock.hcl"
+                ],
+                "aliases": [
+                    "HCL"
+                ]
             }
         ]
     },
