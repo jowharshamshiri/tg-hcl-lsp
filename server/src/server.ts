@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { ConfigEvaluator, formatHcl, HclSyntaxError, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
+import { ConfigEvaluator, formatHcl, HclSyntaxError, LocatedWorkspaceError, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
 import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -160,11 +160,12 @@ async function handleDocumentChange(document: TextDocument) {
 			`[Server(${process.pid}) ${workspaceFolder}] Error handling document change: ${error}`
 		);
 		if (!isCurrent()) return;
+		const located = error instanceof LocatedWorkspaceError && error.uri === document.uri;
 		connection.sendDiagnostics({
 			uri: document.uri,
 			diagnostics: [{
 				severity: 1,
-				range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+				range: located ? error.range : { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
 				message: error instanceof Error ? error.message : String(error),
 				source: 'terragrunt-workspace'
 			}]
