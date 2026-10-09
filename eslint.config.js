@@ -8,6 +8,7 @@ module.exports = tseslint.config(
 			'**/node_modules/**',
 			'**/out/**',
 			'dist/**',
+			'out-test/**',
 			'.vscode-test/**',
 			'*.vsix'
 		]
