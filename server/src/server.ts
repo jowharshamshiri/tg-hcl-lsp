@@ -196,10 +196,10 @@ connection.onInitialize((params: InitializeParams) => {
 			documentLinkProvider: {
 				resolveProvider: true
 			},
-			documentFormattingProvider: true,
-			executeCommandProvider: {
-				commands: ['terragrunt.dependencyTree']
-			}
+			// terragrunt.dependencyTree is handled, but not advertised: the language client registers an advertised
+			// command with VS Code, which allows one registration per name, and the extension runs a server per
+			// workspace folder plus one for files outside them. The extension registers the command itself.
+			documentFormattingProvider: true
 		}
 	};
 });
