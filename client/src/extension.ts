@@ -5,7 +5,7 @@ import {
 } from 'vscode';
 
 import {
-	ExecuteCommandRequest, LanguageClient, LanguageClientOptions, TransportKind
+	CancellationToken, ExecuteCommandRequest, LanguageClient, LanguageClientOptions, MessageSignature, TransportKind
 } from 'vscode-languageclient/node';
 import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 import type { DependencyGraphNode } from './dependencyTreeHandler';
@@ -54,6 +54,12 @@ function clientFor(document: TextDocument): LanguageClient | undefined {
 	return folder ? clients.get(getOuterMostWorkspaceFolder(folder).uri.toString()) : defaultClient;
 }
 
+// Whether a message is about a document inside a workspace folder: one whose parameters name such a document.
+function insideWorkspaceFolder(params: unknown): boolean {
+	const uri = (params as { textDocument?: { uri?: unknown } } | undefined)?.textDocument?.uri;
+	return typeof uri === 'string' && Workspace.getWorkspaceFolder(Uri.parse(uri)) !== undefined;
+}
+
 function createClientOptions(context: ExtensionContext, outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
 	// The server clears the problems of a configuration deleted from disk, which VS Code leaves open in its editor.
 	// Deleting a folder is reported for the folder alone, not for the files in it, so deletions of anything are
@@ -67,6 +73,15 @@ function createClientOptions(context: ExtensionContext, outputChannel: OutputCha
 	return {
 		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted },
 		synchronize: { fileEvents },
+		// A document selector can say which files a client takes but not which it leaves, so the rootless client's
+		// also matches every file inside a workspace folder, which that folder's own client serves. Left alone, both
+		// servers answer for such a file and each of its problems is reported twice. What the rootless client would
+		// send about a document inside a folder is stopped here instead.
+		middleware: folder ? undefined : {
+			sendNotification: (type, next, params) => insideWorkspaceFolder(params) ? Promise.resolve() : next(type, params),
+			sendRequest: <P, R>(type: string | MessageSignature, param: P | undefined, token: CancellationToken | undefined, next: (type: string | MessageSignature, param?: P, token?: CancellationToken) => Promise<R>) =>
+				insideWorkspaceFolder(param) ? Promise.resolve(null as R) : next(type, param, token)
+		},
 		documentSelector: folder
 			? [{ scheme: 'file', language: 'terragrunt', pattern: `${folder.uri.fsPath}/**/*.hcl` }]
 			: [
