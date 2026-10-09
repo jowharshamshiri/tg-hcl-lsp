@@ -4,7 +4,7 @@
     "description": "VSCode extension for Terragrunt HCL language support",
     "author": "Bahram Shamshiri",
     "license": "MIT",
-    "version": "1.124.671",
+    "version": "1.126.681",
     "repository": {
         "type": "git",
         "url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
@@ -92,6 +92,15 @@
                 "configuration": "./language-configuration.json",
                 "aliases": [
                     "Terragrunt",
+                    "HCL"
+                ]
+            },
+            {
+                "id": "hcl",
+                "filenames": [
+                    ".terraform.lock.hcl"
+                ],
+                "aliases": [
                     "HCL"
                 ]
             }
