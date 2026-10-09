@@ -1,11 +1,11 @@
 import * as path from 'path';
 import {
-	workspace as Workspace, window as Window, ExtensionContext, TextDocument, OutputChannel, WorkspaceFolder, Uri,
-	FileSystemWatcher, RelativePattern
+	workspace as Workspace, window as Window, commands as Commands, ExtensionContext, TextDocument, OutputChannel,
+	WorkspaceFolder, Uri, FileSystemWatcher, RelativePattern
 } from 'vscode';
 
 import {
-	LanguageClient, LanguageClientOptions, TransportKind
+	CancellationToken, ExecuteCommandRequest, LanguageClient, LanguageClientOptions, MessageSignature, TransportKind
 } from 'vscode-languageclient/node';
 import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 import type { DependencyGraphNode } from './dependencyTreeHandler';
@@ -48,6 +48,18 @@ function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 	return folder;
 }
 
+// The client serving a document: its outermost workspace folder's, or the rootless one for anything outside them.
+function clientFor(document: TextDocument): LanguageClient | undefined {
+	const folder = Workspace.getWorkspaceFolder(document.uri);
+	return folder ? clients.get(getOuterMostWorkspaceFolder(folder).uri.toString()) : defaultClient;
+}
+
+// Whether a message is about a document inside a workspace folder: one whose parameters name such a document.
+function insideWorkspaceFolder(params: unknown): boolean {
+	const uri = (params as { textDocument?: { uri?: unknown } } | undefined)?.textDocument?.uri;
+	return typeof uri === 'string' && Workspace.getWorkspaceFolder(Uri.parse(uri)) !== undefined;
+}
+
 function createClientOptions(context: ExtensionContext, outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
 	// The server clears the problems of a configuration deleted from disk, which VS Code leaves open in its editor.
 	// Deleting a folder is reported for the folder alone, not for the files in it, so deletions of anything are
@@ -61,6 +73,15 @@ function createClientOptions(context: ExtensionContext, outputChannel: OutputCha
 	return {
 		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted },
 		synchronize: { fileEvents },
+		// A document selector can say which files a client takes but not which it leaves, so the rootless client's
+		// also matches every file inside a workspace folder, which that folder's own client serves. Left alone, both
+		// servers answer for such a file and each of its problems is reported twice. What the rootless client would
+		// send about a document inside a folder is stopped here instead.
+		middleware: folder ? undefined : {
+			sendNotification: (type, next, params) => insideWorkspaceFolder(params) ? Promise.resolve() : next(type, params),
+			sendRequest: <P, R>(type: string | MessageSignature, param: P | undefined, token: CancellationToken | undefined, next: (type: string | MessageSignature, param?: P, token?: CancellationToken) => Promise<R>) =>
+				insideWorkspaceFolder(param) ? Promise.resolve(null as R) : next(type, param, token)
+		},
 		documentSelector: folder
 			? [{ scheme: 'file', language: 'terragrunt', pattern: `${folder.uri.fsPath}/**/*.hcl` }]
 			: [
@@ -130,6 +151,21 @@ export function activate(context: ExtensionContext) {
 			});
 		}
 	}
+
+	// The graph comes from the server for the configuration in the active editor.
+	context.subscriptions.push(Commands.registerCommand('terragrunt.dependencyTree', async () => {
+		const document = Window.activeTextEditor?.document;
+		const client = document?.languageId === 'terragrunt' ? clientFor(document) : undefined;
+		if (!client) {
+			void Window.showInformationMessage('Open a Terragrunt configuration to show its lineage graph.');
+			return;
+		}
+		try {
+			await client.sendRequest(ExecuteCommandRequest.type, { command: 'terragrunt.dependencyTree', arguments: [] });
+		} catch (error) {
+			void Window.showErrorMessage(`The lineage graph could not be built: ${formatError(error)}`);
+		}
+	}));
 
 	context.subscriptions.push(Workspace.onDidOpenTextDocument(didOpenTextDocument));
 	context.subscriptions.push(Workspace.onDidGrantWorkspaceTrust(() => {

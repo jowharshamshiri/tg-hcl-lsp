@@ -104,6 +104,16 @@ For continuous development, rebuild on source changes:
 npm run watch
 ```
 
+### Running the tests
+
+The tests run in a real VS Code, downloaded into `.vscode-test` on the first run. They bundle the extension, open the configurations in `tests/fixtures` and check what the language server returns for them:
+
+```sh
+npm run test:extension-host
+```
+
+Run from a terminal inside VS Code, `ELECTRON_RUN_AS_NODE` is set and the test VS Code fails to start. Unset it first with `env -u ELECTRON_RUN_AS_NODE npm run test:extension-host`. Logs from a run are in `.vscode-test/user-data/logs`.
+
 ### Testing against a local tghclparser
 
 The server depends on the published [tghclparser](https://www.npmjs.com/package/tghclparser) package. To build against a local checkout beside this repository instead, point `node_modules` at it:
