@@ -1,11 +1,11 @@
 import * as path from 'path';
 import {
-	workspace as Workspace, window as Window, ExtensionContext, TextDocument, OutputChannel, WorkspaceFolder, Uri,
-	FileSystemWatcher, RelativePattern
+	workspace as Workspace, window as Window, commands as Commands, ExtensionContext, TextDocument, OutputChannel,
+	WorkspaceFolder, Uri, FileSystemWatcher, RelativePattern
 } from 'vscode';
 
 import {
-	LanguageClient, LanguageClientOptions, TransportKind
+	ExecuteCommandRequest, LanguageClient, LanguageClientOptions, TransportKind
 } from 'vscode-languageclient/node';
 import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 import type { DependencyGraphNode } from './dependencyTreeHandler';
@@ -46,6 +46,12 @@ function getOuterMostWorkspaceFolder(folder: WorkspaceFolder): WorkspaceFolder {
 		}
 	}
 	return folder;
+}
+
+// The client serving a document: its outermost workspace folder's, or the rootless one for anything outside them.
+function clientFor(document: TextDocument): LanguageClient | undefined {
+	const folder = Workspace.getWorkspaceFolder(document.uri);
+	return folder ? clients.get(getOuterMostWorkspaceFolder(folder).uri.toString()) : defaultClient;
 }
 
 function createClientOptions(context: ExtensionContext, outputChannel: OutputChannel, folder?: WorkspaceFolder): LanguageClientOptions {
@@ -130,6 +136,21 @@ export function activate(context: ExtensionContext) {
 			});
 		}
 	}
+
+	// The graph comes from the server for the configuration in the active editor.
+	context.subscriptions.push(Commands.registerCommand('terragrunt.dependencyTree', async () => {
+		const document = Window.activeTextEditor?.document;
+		const client = document?.languageId === 'terragrunt' ? clientFor(document) : undefined;
+		if (!client) {
+			void Window.showInformationMessage('Open a Terragrunt configuration to show its lineage graph.');
+			return;
+		}
+		try {
+			await client.sendRequest(ExecuteCommandRequest.type, { command: 'terragrunt.dependencyTree', arguments: [] });
+		} catch (error) {
+			void Window.showErrorMessage(`The lineage graph could not be built: ${formatError(error)}`);
+		}
+	}));
 
 	context.subscriptions.push(Workspace.onDidOpenTextDocument(didOpenTextDocument));
 	context.subscriptions.push(Workspace.onDidGrantWorkspaceTrust(() => {

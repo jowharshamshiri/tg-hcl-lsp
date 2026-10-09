@@ -19,6 +19,10 @@ client/**
 images/**
 scripts/**
 server/**
+tests/**
+out-test/**
+.vscode-test/**
+tsconfig.test.json
 *.vsix
 icon.svg
 webpack.config.js

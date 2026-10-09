@@ -9,6 +9,8 @@ lerna-debug.log*
 
 # dependencies
 out
+out-test
+.vscode-test
 *.tsbuildinfo
 node_modules
 operation-lock.json
