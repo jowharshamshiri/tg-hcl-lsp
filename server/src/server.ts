@@ -160,14 +160,20 @@ async function handleDocumentChange(document: TextDocument) {
 			`[Server(${process.pid}) ${workspaceFolder}] Error handling document change: ${error}`
 		);
 		if (!isCurrent()) return;
-		const located = error instanceof LocatedWorkspaceError && error.uri === document.uri;
+		// A path that cannot be resolved is underlined where it is written. Written in a configuration this one
+		// includes, it is still this unit's problem: it stays on the first line, and points at the path.
+		const located = error instanceof LocatedWorkspaceError ? error : undefined;
+		const here = located?.uri === document.uri;
 		connection.sendDiagnostics({
 			uri: document.uri,
 			diagnostics: [{
 				severity: 1,
-				range: located ? error.range : { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+				range: located && here ? located.range : { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
 				message: error instanceof Error ? error.message : String(error),
-				source: 'terragrunt-workspace'
+				source: 'terragrunt-workspace',
+				...(located && !here
+					? { relatedInformation: [{ location: { uri: located.uri, range: located.range }, message: 'The path is written here' }] }
+					: {})
 			}]
 		});
 
