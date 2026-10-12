@@ -22,6 +22,7 @@ Install **Terragrunt Language Server** from the [VS Code Marketplace](https://ma
 - **Evaluated values** on hover, with the expressions that have one underlined — see [Settings](#settings)
 - **Show Terragrunt Lineage Graph** — a visual, interactive graph of the whole workspace covering includes, dependencies, units, nested stacks, and reading lineage, with dependency outputs surfaced from state
 - **Formatting** into the layout `terragrunt hcl format` produces, with nothing else to install — see [Formatting](#formatting)
+- **Remote module sources** — a registry module's variables drive completion, hover and checks in `inputs`, as a local module's do — see [Remote module sources](#remote-module-sources)
 - **Syntax highlighting** for Terragrunt blocks, attributes, references, and functions
 
 The lineage graph opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. **Open** is shown only for files inside the active workspace.
@@ -45,6 +46,16 @@ The lineage graph opens with the first two levels visible, provides filter and e
 
 The formatter is built in, so neither Terragrunt nor OpenTofu needs to be installed, and it works in Restricted Mode. A file with a syntax error is not changed; the error is among its problems and in the `tg-hcl-lsp` output.
 
+## Remote module sources
+
+A unit whose `terraform { source }` is a local path has its `inputs` completed, documented and checked against the module's variables. A registry source (`tfr:///namespace/name/provider?version=…`) gets the same once it is fetched, which is off until you switch on [`terragrunt.remoteModules.enabled`](#terragruntremotemodulesenabled). Until then, the source has a hint saying so.
+
+- **Trust:** nothing is fetched in Restricted Mode.
+- **Hosts:** you are asked before the first contact with each registry or git host: **Allow** for this session, **Always Allow**, or **Deny**. Approving a registry covers the hosts it sends downloads to. A question that has left the screen waits in the notification centre, under the bell in the status bar. A prompt closed without an answer is asked again next time. After **Deny**, the module's problem offers a quick fix to ask again, as does **Terragrunt: Retry Remote Module Fetches**.
+- **What is fetched:** the module's top-level `.tf` files, from the git repository or archive the registry points to, into a per-user cache keyed by version, so each version is fetched once. **Terragrunt: Clear Remote Module Cache** empties it and fetches open units' modules again.
+- **Registry tokens:** **Terragrunt: Set Registry Token** saves a token for a host in the system keychain, through VS Code's secret storage; it is never written to settings. **Terragrunt: Remove Registry Token** deletes one. When a registry refuses a fetch for want of a token, the problem on `source` offers a quick fix that asks for one. A token is read only when its host is about to be contacted, and sent to that host alone. Without one, the token Terraform would use is found as Terraform finds it: `TF_TOKEN_<host>`, then `credentials` blocks in `~/.terraformrc` or `~/.terraform.d`, then `TG_TF_REGISTRY_TOKEN` for private registries.
+- **Git:** modules served from git need git 2.31 or newer on `PATH`, and use git's own credential helpers and ssh agent; the extension holds no git credentials.
+
 ## Settings
 
 ### `terragrunt.evaluatedValues.underline`
@@ -56,6 +67,14 @@ Hovering an expression shows the value it evaluates to. A dotted underline marks
 | `cursorLine` (default) | the expressions on the lines that have a cursor
 | `always` | every evaluated expression in the file
 | `off` | nothing — hovering still shows the value
+
+### `terragrunt.remoteModules.enabled`
+
+Fetch registry module sources, as described in [Remote module sources](#remote-module-sources). Off by default.
+
+### `terragrunt.remoteModules.defaultRegistryHost`
+
+The registry `tfr:///` names, such as `registry.opentofu.org`. When empty, it is the registry of the binary Terragrunt would run: `registry.terraform.io` for `terraform`, `registry.opentofu.org` for anything else. `TG_TF_DEFAULT_REGISTRY_HOST` in the environment wins over this setting.
 
 ## Terragrunt 1.x first
 
