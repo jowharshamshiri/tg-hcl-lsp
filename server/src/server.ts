@@ -24,7 +24,7 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 import {
-	ambientCredentials, chainCredentials, classifyModuleSource, ConfigEvaluator, createRegistryResolver, formatHcl, HclSyntaxError, LocatedWorkspaceError,
+	ambientCredentials, chainCredentials, ConfigEvaluator, createRegistryResolver, formatHcl, HclSyntaxError, LocatedWorkspaceError,
 	ParsedDocument, registerSecret, Workspace, runtimeValueToPlain
 } from 'tghclparser';
 import type {
@@ -188,34 +188,15 @@ function forgetDocument(uri: string) {
 	connection.sendDiagnostics({ uri, diagnostics: [] });
 }
 
+// A fetch the parser could not make carries the failure's code, and the host it is about when the user can act on
+// that host: the registry that refused for want of a token, or the host whose approval was not given.
 const HOST_NOT_APPROVED = 'HostNotApproved';
 const REGISTRY_AUTH = 'RegistryAuth';
-
-// The registry a source names, which is the host its token is stored for. A `tfr:///` source names none, and the
-// registry it means is not worked out again here: the token prompt asks for the host instead.
-function registryHostOf(sourceText: string): string | undefined {
-	try {
-		const source = classifyModuleSource(sourceText);
-		return source.kind === 'registry' && source.hostGiven ? source.host : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-// A fetch refused because its host was denied, or the question went unanswered, is marked so it can offer to retry;
-// one the registry refused for want of a token is marked so it can offer to set one.
-function withQuickFixCode(parsedDocument: ParsedDocument): (diagnostic: Diagnostic) => Diagnostic {
-	const state = parsedDocument.getModuleVariables();
-	if (state?.status !== 'fetchFailed' || (state.code !== HOST_NOT_APPROVED && state.code !== REGISTRY_AUTH)) return diagnostic => diagnostic;
-	const message = `Module source could not be fetched: ${state.reason}`;
-	const marked = { code: state.code, ...(state.code === REGISTRY_AUTH ? { data: { host: registryHostOf(state.sourceText) } } : {}) };
-	return diagnostic => diagnostic.source === 'terragrunt' && diagnostic.message === message ? { ...diagnostic, ...marked } : diagnostic;
-}
 
 // Returns whether the problems were published: a document closed, deleted or edited while it was evaluated has had
 // its problems cleared or is being checked again.
 async function publishDiagnostics(document: TextDocument, parsedDocument: ParsedDocument, isCurrent: () => boolean): Promise<boolean> {
-	const diagnostics = parsedDocument.getDiagnostics().map(withQuickFixCode(parsedDocument));
+	const diagnostics = [...parsedDocument.getDiagnostics()];
 	if (diagnostics.every(diagnostic => diagnostic.severity !== DiagnosticSeverity.Error)) {
 		const evaluation = await evaluateDocument(document.uri, document.getText());
 		// A value that cannot be known yet, such as a dependency never applied, is not a problem in the
@@ -326,25 +307,33 @@ connection.onRequest('terragrunt/clearRemoteModuleCache', async () => {
 	return root;
 });
 
+// The host a failed fetch is about, which the parser gives with both codes a quick fix is offered for.
+function fetchFailureHost(diagnostic: Diagnostic): string {
+	const host = (diagnostic.data as { host?: unknown } | undefined)?.host;
+	if (typeof host !== 'string') throw new Error(`The parser reported ${String(diagnostic.code)} without the host it is about: ${diagnostic.message}`);
+	return host;
+}
+
 // The commands are the extension's own. Retrying reconfigures every server, so each forgets its refused hosts and
 // asks again; a stored token does the same once it is saved.
 connection.onCodeAction((params): CodeAction[] => params.context.diagnostics.flatMap((diagnostic): CodeAction[] => {
+	if (diagnostic.source !== 'terragrunt') return [];
 	if (diagnostic.code === HOST_NOT_APPROVED) {
 		return [{
-			title: 'Ask again whether modules may be fetched from this host',
+			title: `Ask again whether modules may be fetched from ${fetchFailureHost(diagnostic)}`,
 			kind: CodeActionKind.QuickFix,
 			diagnostics: [diagnostic],
 			command: { title: 'Retry Remote Module Fetches', command: 'terragrunt.retryRemoteModules' }
 		}];
 	}
 	if (diagnostic.code === REGISTRY_AUTH) {
-		const host = (diagnostic.data as { host?: unknown } | undefined)?.host;
+		const host = fetchFailureHost(diagnostic);
 		return [{
-			title: typeof host === 'string' ? `Set a registry token for ${host}` : 'Set a registry token',
+			title: `Set a registry token for ${host}`,
 			kind: CodeActionKind.QuickFix,
 			diagnostics: [diagnostic],
 			isPreferred: true,
-			command: { title: 'Set Registry Token', command: 'terragrunt.setRegistryToken', arguments: typeof host === 'string' ? [host] : [] }
+			command: { title: 'Set Registry Token', command: 'terragrunt.setRegistryToken', arguments: [host] }
 		}];
 	}
 	return [];

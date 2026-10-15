@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureActive, openFixture, waitFor, waitForDiagnostics } from './helpers';
+import { ensureActive, openFixture, waitFor } from './helpers';
 import { TestRegistry } from './registry';
 
 const VPC_VARIABLES = 'variable "name" {\n  description = "VPC name"\n  type = string\n}\n\nvariable "cidr" {\n  type = string\n  default = "10.0.0.0/16"\n}\n';
@@ -144,10 +144,9 @@ suite('Remote module sources', () => {
 			assert.ok(registry.count('/v1/modules/acme/private/aws/versions') > asked, 'retrying did not ask the registry again');
 		});
 
-		// Skipped until tghclparser fetches again a module another workspace has cleared from the cache they share; see
-		// its issue "A module cleared from the cache by another Workspace can't be read". Here the folder's server
-		// clears after the rootless one has fetched this unit's module again.
-		test.skip('clearing the cache leaves the open units\' modules in use', async () => {
+		// The servers share the cache, and the folder's server clears it after the rootless one has fetched this unit's
+		// module again, deleting it; the rootless server fetches it once more when the unit is next checked.
+		test('clearing the cache leaves the open units\' modules in use', async () => {
 			const document = await openUnit('cleared', registry.source('acme/vpc/aws'), '  ');
 			await completionsAt(document, 5);
 			const downloaded = registry.count('/archives/acme/vpc/aws.tgz');
@@ -155,11 +154,11 @@ suite('Remote module sources', () => {
 			await vscode.commands.executeCommand('terragrunt.clearRemoteModuleCache');
 			assert.ok(registry.count('/archives/acme/vpc/aws.tgz') > downloaded, 'the module was not downloaded again');
 
-			// Checked again, the unit still reads the module.
+			// Checked again, the unit reads the module once its fetch lands.
 			const editor = await vscode.window.showTextDocument(document);
-			const published = waitForDiagnostics(document.uri);
 			await editor.edit(edit => edit.insert(new vscode.Position(5, 2), ' '));
-			assert.deepStrictEqual((await published).map(diagnostic => diagnostic.message), ['Missing required module inputs: name']);
+			const settled = await problems(document.uri, found => found.some(diagnostic => diagnostic.message === 'Missing required module inputs: name'));
+			assert.deepStrictEqual(settled.map(diagnostic => diagnostic.message), ['Missing required module inputs: name']);
 			const labels = await completionsAt(document, 5);
 			assert.ok(labels.includes('name'), `expected the module's variables, got ${labels.join(', ')}`);
 		});
