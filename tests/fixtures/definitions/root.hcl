@@ -3,7 +3,7 @@ locals {
 }
 
 dependency "network" {
-  config_path = "../vpc"
+  config_path = "../../vpc"
 }
 
 inputs = {
