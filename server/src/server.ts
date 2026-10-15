@@ -8,7 +8,10 @@ import {
 	InitializeParams,
 	DiagnosticSeverity,
 	FileChangeType,
+	LocationLink,
 	MarkupKind,
+	Position,
+	Range,
 	TextEdit
 } from 'vscode-languageserver/node';
 
@@ -20,7 +23,7 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 import { ConfigEvaluator, formatHcl, HclSyntaxError, LocatedWorkspaceError, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
-import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
+import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, Token, TreeNode, ValueType } from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -197,6 +200,7 @@ connection.onInitialize((params: InitializeParams) => {
 				change: TextDocumentSyncKind.Incremental
 			},
 			hoverProvider: true,
+			definitionProvider: true,
 			completionProvider: {
 				resolveProvider: false,
 				triggerCharacters: ['.', '=', ' ', '$', '{', '"', '/']
@@ -386,6 +390,132 @@ connection.onDocumentLinks(async (params) => {
         connection.console.error(`Error providing document links: ${error}`);
         return null;
     }
+});
+
+function containsPosition(token: Token, position: Position): boolean {
+	const { startPosition: start, endPosition: end } = token;
+	if (position.line < start.line || position.line > end.line) return false;
+	if (position.line === start.line && position.character < start.character) return false;
+	return !(position.line === end.line && position.character > end.character);
+}
+
+// The innermost reference the cursor is in, whichever of its parts the cursor is on. The whole tree is searched rather
+// than following findTokenAtPosition, because the literal parts of an interpolated string span the whole string and
+// would hide a reference written inside `${...}`.
+function referenceAt(document: ParsedDocument, position: Position): Token | undefined {
+	let found: Token | undefined;
+	const visit = (token: Token) => {
+		if (!containsPosition(token, position)) return;
+		if (token.type === 'local_reference' || token.type === 'dependency_reference' || token.type === 'reference') found = token;
+		token.children.forEach(visit);
+	};
+	document.getTokens().forEach(visit);
+	return found;
+}
+
+function referenceChain(reference: Token): string[] {
+	const chain = reference.children.find(child => child.type === 'access_chain');
+	return chain?.children.filter(child => child.type === 'reference_identifier').map(child => child.getDisplayText()) ?? [];
+}
+
+function rootBlocks(document: ParsedDocument, type: string): Token[] {
+	return document.getTokens()[0]?.children.filter(child => child.type === 'block' && child.value === type) ?? [];
+}
+
+function blockLabel(block: Token): string | undefined {
+	return block.children.find(child => child.type === 'parameter')?.getDisplayText();
+}
+
+function tokenRange(token: Token): Range {
+	return { start: token.startPosition, end: token.endPosition };
+}
+
+// The attribute is the target; its name is what the editor selects.
+function attributeLink(origin: Token, document: ParsedDocument, attribute: Token): LocationLink {
+	return LocationLink.create(document.getUri(), tokenRange(attribute), tokenRange(attribute.children[0] ?? attribute), tokenRange(origin));
+}
+
+function namedAttribute(owner: Token | undefined, name: string): Token | undefined {
+	return owner?.children.find(child => child.type === 'attribute' && child.value === name);
+}
+
+function localDefinition(document: ParsedDocument, name: string): Token | undefined {
+	for (const block of rootBlocks(document, 'locals')) {
+		const attribute = namedAttribute(block, name);
+		if (attribute) return attribute;
+	}
+	return undefined;
+}
+
+// Include paths are resolved from the configuration that writes them, as Terragrunt resolves a unit's own includes.
+async function includedDocuments(document: ParsedDocument): Promise<{ name: string | undefined, document: ParsedDocument }[]> {
+	const ast = document.getAST();
+	if (!ast) return [];
+	const included: { name: string | undefined, document: ParsedDocument }[] = [];
+	for (const include of document.findIncludeBlocks(ast)) {
+		const target = await workspace.getParsedDocument(await workspace.resolveIncludePath(include.path, document.getUri()));
+		if (target) included.push({ name: blockLabel(include.block), document: target });
+	}
+	return included;
+}
+
+// include.<name>.locals.<local> and include.<name>.inputs.<key> lead to where the included configuration sets them;
+// any other part of an include, or one it does not set literally, leads to the included file.
+async function includeDefinition(origin: Token, document: ParsedDocument, chain: string[]): Promise<LocationLink | undefined> {
+	const [name, section, key] = chain;
+	const included = (await includedDocuments(document)).find(candidate => candidate.name === name)?.document;
+	if (!included) return undefined;
+	const attribute = key === undefined
+		? undefined
+		: section === 'locals'
+			? localDefinition(included, key)
+			: section === 'inputs'
+				? namedAttribute(included.getInputsAssignment()?.children[1], key)
+				: undefined;
+	if (attribute) return attributeLink(origin, included, attribute);
+	const start: Range = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+	return LocationLink.create(included.getUri(), start, start, tokenRange(origin));
+}
+
+// Terragrunt merges the dependency blocks of included configurations into the unit, so a dependency the unit does not
+// declare itself is looked for in what it includes.
+async function dependencyDefinition(origin: Token, document: ParsedDocument, name: string): Promise<LocationLink | undefined> {
+	for (const candidate of [document, ...(await includedDocuments(document)).map(include => include.document)]) {
+		const block = rootBlocks(candidate, 'dependency').find(dependency => blockLabel(dependency) === name);
+		if (block) return LocationLink.create(candidate.getUri(), tokenRange(block), tokenRange(block.children.find(child => child.type === 'parameter') ?? block), tokenRange(origin));
+	}
+	return undefined;
+}
+
+connection.onDefinition(async (params) => {
+	try {
+		const parsedDocument = parsedDocuments.get(params.textDocument.uri);
+		if (!parsedDocument) {
+			return null;
+		}
+
+		const reference = referenceAt(parsedDocument, params.position);
+		if (!reference) {
+			return null;
+		}
+
+		let target: LocationLink | undefined;
+		if (reference.type === 'local_reference') {
+			const name = referenceChain(reference)[0];
+			const attribute = name === undefined ? undefined : localDefinition(parsedDocument, name);
+			target = attribute && attributeLink(reference, parsedDocument, attribute);
+		} else if (reference.type === 'dependency_reference') {
+			// The grammar puts the dependency's name first, ahead of the access chain.
+			const name = reference.children[0]?.getDisplayText();
+			target = name === undefined ? undefined : await dependencyDefinition(reference, parsedDocument, name);
+		} else if (reference.value === 'include') {
+			target = await includeDefinition(reference, parsedDocument, referenceChain(reference));
+		}
+		return target ? [target] : null;
+	} catch (error) {
+		connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error while providing definition: ${error}`);
+		return null;
+	}
 });
 
 // Formatting is the parser's own: the layout `terragrunt hcl format` produces, with no CLI to install or run. It
