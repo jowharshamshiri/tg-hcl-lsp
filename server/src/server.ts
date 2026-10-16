@@ -268,6 +268,7 @@ connection.onInitialize((params: InitializeParams) => {
 				change: TextDocumentSyncKind.Incremental
 			},
 			hoverProvider: true,
+			definitionProvider: true,
 			completionProvider: {
 				resolveProvider: false,
 				triggerCharacters: ['.', '=', ' ', '$', '{', '"', '/']
@@ -519,6 +520,20 @@ connection.onDocumentLinks(async (params) => {
         connection.console.error(`Error providing document links: ${error}`);
         return null;
     }
+});
+
+// Where a local, an include's value or a dependency is set, which the parser works out as it does hover and links.
+connection.onDefinition(async (params) => {
+	try {
+		const parsedDocument = parsedDocuments.get(params.textDocument.uri);
+		if (!parsedDocument) {
+			return null;
+		}
+		return await parsedDocument.getDefinition(params.position);
+	} catch (error) {
+		connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error while providing definition: ${error}`);
+		return null;
+	}
 });
 
 // Formatting is the parser's own: the layout `terragrunt hcl format` produces, with no CLI to install or run. It
