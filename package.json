@@ -4,7 +4,7 @@
     "description": "VSCode extension for Terragrunt HCL language support",
     "author": "Bahram Shamshiri",
     "license": "MIT",
-    "version": "1.151.755",
+    "version": "1.156.788",
     "repository": {
         "type": "git",
         "url": "https://github.com/jowharshamshiri/tg-hcl-lsp"
@@ -22,7 +22,7 @@
     "capabilities": {
         "untrustedWorkspaces": {
             "supported": "limited",
-            "description": "Parsing, diagnostics, completion, formatting, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, and dependency graphs require a trusted workspace."
+            "description": "Parsing, diagnostics, completion, formatting, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, dependency graphs, and fetching remote module sources require a trusted workspace."
         }
     },
     "main": "./dist/extension.js",
@@ -51,6 +51,18 @@
                     ],
                     "default": "cursorLine",
                     "markdownDescription": "Which expressions to underline among those whose hover shows an evaluated value. An expression is included only when its value is not already written in the source: a reference, a function call, an interpolation or an operator, never a plain literal. Requires a trusted workspace."
+                },
+                "terragrunt.remoteModules.enabled": {
+                    "type": "boolean",
+                    "scope": "window",
+                    "default": false,
+                    "markdownDescription": "Fetch the module a unit's `terraform { source }` names from a registry (`tfr:///…`), so its variables drive completion, hover and checks in `inputs`, as a local module's do. You are asked before the first contact with each host. Requires a trusted workspace, and git 2.31 or newer for modules served from git."
+                },
+                "terragrunt.remoteModules.defaultRegistryHost": {
+                    "type": "string",
+                    "scope": "window",
+                    "default": "",
+                    "markdownDescription": "The registry `tfr:///` names, such as `registry.opentofu.org`. When empty, it is the registry of the binary Terragrunt would run. `TG_TF_DEFAULT_REGISTRY_HOST` in the environment wins over this setting."
                 }
             }
         },
@@ -59,6 +71,26 @@
                 "command": "terragrunt.dependencyTree",
                 "title": "Show Terragrunt Lineage Graph",
                 "enableCommandUris": true
+            },
+            {
+                "command": "terragrunt.clearRemoteModuleCache",
+                "title": "Clear Remote Module Cache",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.retryRemoteModules",
+                "title": "Retry Remote Module Fetches",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.setRegistryToken",
+                "title": "Set Registry Token",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.removeRegistryToken",
+                "title": "Remove Registry Token",
+                "category": "Terragrunt"
             }
         ],
         "menus": {
@@ -73,6 +105,14 @@
                 {
                     "command": "terragrunt.dependencyTree",
                     "when": "editorLangId == terragrunt && isWorkspaceTrusted"
+                },
+                {
+                    "command": "terragrunt.clearRemoteModuleCache",
+                    "when": "isWorkspaceTrusted"
+                },
+                {
+                    "command": "terragrunt.retryRemoteModules",
+                    "when": "isWorkspaceTrusted"
                 }
             ]
         },

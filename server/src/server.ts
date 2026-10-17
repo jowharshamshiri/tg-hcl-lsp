@@ -3,8 +3,11 @@ import {
 	TextDocuments,
 	ProposedFeatures,
 	TextDocumentSyncKind,
+	CodeAction,
+	CodeActionKind,
 	CompletionItem,
 	CompletionItemKind,
+	Diagnostic,
 	InitializeParams,
 	DiagnosticSeverity,
 	FileChangeType,
@@ -13,14 +16,20 @@ import {
 } from 'vscode-languageserver/node';
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { ConfigEvaluator, formatHcl, HclSyntaxError, LocatedWorkspaceError, ParsedDocument, Workspace, runtimeValueToPlain } from 'tghclparser';
-import type { ConfigEvaluationResult, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType } from 'tghclparser';
+import {
+	ambientCredentials, chainCredentials, ConfigEvaluator, createRegistryResolver, formatHcl, HclSyntaxError, LocatedWorkspaceError,
+	ParsedDocument, registerSecret, Workspace, runtimeValueToPlain
+} from 'tghclparser';
+import type {
+	ConfigEvaluationResult, CredentialProvider, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType
+} from 'tghclparser';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -72,6 +81,56 @@ const evaluator = new ConfigEvaluator({
 		} as RuntimeValue<ValueType>;
 	}
 });
+
+interface RemoteModuleSettings {
+	enabled: boolean;
+	defaultRegistryHost?: string;
+}
+
+let remoteModuleSettings: RemoteModuleSettings = { enabled: false };
+
+function readRemoteModuleSettings(value: unknown): RemoteModuleSettings {
+	const settings = value as { enabled?: unknown; defaultRegistryHost?: unknown } | undefined;
+	const host = settings?.defaultRegistryHost;
+	return { enabled: settings?.enabled === true, ...(typeof host === 'string' && host ? { defaultRegistryHost: host } : {}) };
+}
+
+// A token set in the editor lives in its secret storage, and is asked for each time the parser is about to contact
+// the host it is for. It is registered first, so it is redacted from every message the parser writes.
+const editorTokens: CredentialProvider = {
+	tokenFor: async host => {
+		const token = await connection.sendRequest<string | null>('terragrunt/registryToken', { host });
+		if (!token) return undefined;
+		registerSecret(token);
+		return token;
+	}
+};
+
+const credentials = chainCredentials(editorTokens, ambientCredentials({ env: process.env, homeDir: os.homedir() }));
+// Hosts contacted over plain HTTP, without asking and without the address checks, as tghclp's CLI allows: the test
+// suite's loopback registry.
+const insecureRegistryHosts = (process.env.TGHCLP_INSECURE_REGISTRY_HOSTS ?? '').split(',').map(host => host.trim()).filter(Boolean);
+const registry = createRegistryResolver({ allowInsecureHosts: insecureRegistryHosts });
+
+// Configured even while fetching is off, so a remote source says how to switch it on. Configuring again forgets the
+// parser's failed fetches and host decisions, so a new token or approval is tried at once.
+function configureRemoteModules() {
+	workspace.configureRemoteModules(
+		{
+			enabled: remoteModuleSettings.enabled,
+			trusted: workspaceTrusted,
+			defaultRegistryHost: remoteModuleSettings.defaultRegistryHost,
+			disabledMessage: 'set terragrunt.remoteModules.enabled to fetch registry modules'
+		},
+		{
+			env: process.env,
+			credentials,
+			registry,
+			allowedHosts: insecureRegistryHosts,
+			approveHost: (host, kind) => connection.sendRequest<boolean>('terragrunt/approveHost', { host, kind })
+		}
+	);
+}
 
 function filePathFromUri(uri: string): string {
 	if (!uri.startsWith('file:')) throw new Error(`Semantic evaluation requires a file URI: ${uri}`);
@@ -129,6 +188,29 @@ function forgetDocument(uri: string) {
 	connection.sendDiagnostics({ uri, diagnostics: [] });
 }
 
+// A fetch the parser could not make carries the failure's code, and the host it is about when the user can act on
+// that host: the registry that refused for want of a token, or the host whose approval was not given.
+const HOST_NOT_APPROVED = 'HostNotApproved';
+const REGISTRY_AUTH = 'RegistryAuth';
+
+// Returns whether the problems were published: a document closed, deleted or edited while it was evaluated has had
+// its problems cleared or is being checked again.
+async function publishDiagnostics(document: TextDocument, parsedDocument: ParsedDocument, isCurrent: () => boolean): Promise<boolean> {
+	const diagnostics = [...parsedDocument.getDiagnostics()];
+	if (diagnostics.every(diagnostic => diagnostic.severity !== DiagnosticSeverity.Error)) {
+		const evaluation = await evaluateDocument(document.uri, document.getText());
+		// A value that cannot be known yet, such as a dependency never applied, is not a problem in the
+		// configuration, so it is not reported as one.
+		if (!evaluation.valid && evaluation.error && !evaluation.unresolved) diagnostics.push(evaluationDiagnostic(evaluation.error));
+	}
+	if (!isCurrent()) return false;
+	connection.sendDiagnostics({
+		uri: document.uri,
+		diagnostics
+	});
+	return true;
+}
+
 async function handleDocumentChange(document: TextDocument) {
 	const check = {};
 	checks.set(document.uri, check);
@@ -141,20 +223,7 @@ async function handleDocumentChange(document: TextDocument) {
 		// A document forgotten while it was being added is not left behind in the workspace.
 		if (!checks.has(document.uri)) workspace.removeDocument(document.uri);
 
-		const diagnostics = [...parsedDocument.getDiagnostics()];
-		if (diagnostics.every(diagnostic => diagnostic.severity !== DiagnosticSeverity.Error)) {
-			const evaluation = await evaluateDocument(document.uri, document.getText());
-			// A value that cannot be known yet, such as a dependency never applied, is not a problem in the
-			// configuration, so it is not reported as one.
-			if (!evaluation.valid && evaluation.error && !evaluation.unresolved) diagnostics.push(evaluationDiagnostic(evaluation.error));
-		}
-		// A document closed, deleted or edited while it was evaluated has had its problems cleared or is being
-		// checked again.
-		if (!isCurrent()) return;
-		connection.sendDiagnostics({
-			uri: document.uri,
-			diagnostics
-		});
+		if (!await publishDiagnostics(document, parsedDocument, isCurrent)) return;
 		await publishEvaluatableRanges(document);
 	} catch (error) {
 		connection.console.error(
@@ -183,9 +252,11 @@ async function handleDocumentChange(document: TextDocument) {
 
 connection.onInitialize((params: InitializeParams) => {
 	workspaceFolder = params.rootUri;
-	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown } | undefined;
+	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown; remoteModules?: unknown } | undefined;
 	workspaceTrusted = initializationOptions?.isWorkspaceTrusted === true;
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
+	remoteModuleSettings = readRemoteModuleSettings(initializationOptions?.remoteModules);
+	configureRemoteModules();
 	if (workspaceFolder) {
 		workspace.setWorkspaceRoot(workspaceFolder);
 	}
@@ -208,7 +279,8 @@ connection.onInitialize((params: InitializeParams) => {
 			// terragrunt.dependencyTree is handled, but not advertised: the language client registers an advertised
 			// command with VS Code, which allows one registration per name, and the extension runs a server per
 			// workspace folder plus one for files outside them. The extension registers the command itself.
-			documentFormattingProvider: true
+			documentFormattingProvider: true,
+			codeActionProvider: { codeActionKinds: [CodeActionKind.QuickFix] }
 		}
 	};
 });
@@ -216,9 +288,70 @@ connection.onInitialize((params: InitializeParams) => {
 connection.onNotification('terragrunt/workspaceTrustChanged', (params: { isTrusted: boolean }) => {
 	workspaceTrusted = params.isTrusted === true;
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
+	configureRemoteModules();
 	if (workspaceTrusted) {
 		void Promise.all(documents.all().map(document => handleDocumentChange(document)));
 	}
+});
+
+connection.onNotification('terragrunt/remoteModulesChanged', (params: unknown) => {
+	remoteModuleSettings = readRemoteModuleSettings(params);
+	configureRemoteModules();
+	void Promise.all(documents.all().map(document => handleDocumentChange(document)));
+});
+
+// Answers once this server's modules have been fetched again, so the next server to clear the shared cache does not
+// delete files still being written.
+connection.onRequest('terragrunt/clearRemoteModuleCache', async () => {
+	const root = await workspace.clearRemoteModuleCache();
+	await workspace.remoteModulesSettled();
+	return root;
+});
+
+// The host a failed fetch is about, which the parser gives with both codes a quick fix is offered for.
+function fetchFailureHost(diagnostic: Diagnostic): string {
+	const host = (diagnostic.data as { host?: unknown } | undefined)?.host;
+	if (typeof host !== 'string') throw new Error(`The parser reported ${String(diagnostic.code)} without the host it is about: ${diagnostic.message}`);
+	return host;
+}
+
+// The commands are the extension's own. Retrying reconfigures every server, so each forgets its refused hosts and
+// asks again; a stored token does the same once it is saved.
+connection.onCodeAction((params): CodeAction[] => params.context.diagnostics.flatMap((diagnostic): CodeAction[] => {
+	if (diagnostic.source !== 'terragrunt') return [];
+	if (diagnostic.code === HOST_NOT_APPROVED) {
+		return [{
+			title: `Ask again whether modules may be fetched from ${fetchFailureHost(diagnostic)}`,
+			kind: CodeActionKind.QuickFix,
+			diagnostics: [diagnostic],
+			command: { title: 'Retry Remote Module Fetches', command: 'terragrunt.retryRemoteModules' }
+		}];
+	}
+	if (diagnostic.code === REGISTRY_AUTH) {
+		const host = fetchFailureHost(diagnostic);
+		return [{
+			title: `Set a registry token for ${host}`,
+			kind: CodeActionKind.QuickFix,
+			diagnostics: [diagnostic],
+			isPreferred: true,
+			command: { title: 'Set Registry Token', command: 'terragrunt.setRegistryToken', arguments: [host] }
+		}];
+	}
+	return [];
+}));
+
+// A fetch has landed, or a cleared module is being fetched again, and the unit's problems have been recomputed.
+workspace.onModuleVariablesChanged(uri => {
+	const document = documents.get(uri);
+	const parsedDocument = parsedDocuments.get(uri);
+	const check = checks.get(uri);
+	if (!document || !parsedDocument || !check) return;
+	// The source links to the fetched module only once it has landed, which the editor cannot learn by itself.
+	publishDiagnostics(document, parsedDocument, () => checks.get(uri) === check).then(published => {
+		if (published) connection.sendNotification('terragrunt/linksChanged', { uri });
+	}).catch(error => {
+		connection.console.error(`[Server(${process.pid}) ${workspaceFolder}] Error publishing fetched module problems: ${error}`);
+	});
 });
 
 connection.onExecuteCommand(async (params) => {
