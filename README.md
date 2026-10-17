@@ -19,6 +19,7 @@ Install **Terragrunt Language Server** from the [VS Code Marketplace](https://ma
 - **Context-aware completions** for blocks, attributes, functions, locals, dependencies, includes, features, values, units, and stacks
 - **File-kind-aware validation** that knows the difference between a unit, an explicit stack, a values file, and an autoinclude — with current-regime diagnostics that flag removed and deprecated syntax
 - **Hover documentation** and **clickable document links** for includes, dependencies, and read files
+- **Go to definition** for `local.*`, `include.<name>.locals.*`, `include.<name>.inputs.*`, and `dependency.<name>.*` references
 - **Evaluated values** on hover, with the expressions that have one underlined — see [Settings](#settings)
 - **Show Terragrunt Lineage Graph** — a visual, interactive graph of the whole workspace covering includes, dependencies, units, nested stacks, and reading lineage, with dependency outputs surfaced from state
 - **Formatting** into the layout `terragrunt hcl format` produces, with nothing else to install — see [Formatting](#formatting)
