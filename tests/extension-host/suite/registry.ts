@@ -33,14 +33,14 @@ export class TestRegistry {
 		private readonly archives: Map<string, Buffer>
 	) {}
 
-	/** Serves each module at its `namespace/name/provider` address. */
-	static async start(modules: Record<string, ServedModule>): Promise<TestRegistry> {
+	/** Serves each module at its `namespace/name/provider` address, on `port`, or any free port for 0. */
+	static async start(modules: Record<string, ServedModule>, port = 0): Promise<TestRegistry> {
 		const archives = new Map<string, Buffer>();
 		for (const [address, module] of Object.entries(modules)) archives.set(address, tarGz(module.files));
 		// The server answers through whichever registry it is given once its port is known.
 		const answering: { registry?: TestRegistry } = {};
 		const server = createServer((request, response) => answering.registry!.handle(request, response));
-		await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+		await new Promise<void>(resolve => server.listen(port, '127.0.0.1', resolve));
 		const address = server.address();
 		if (address === null || typeof address === 'string') throw new Error('the test registry did not expose a TCP port');
 		answering.registry = new TestRegistry(server, `127.0.0.1:${address.port}`, new Map(Object.entries(modules)), archives);

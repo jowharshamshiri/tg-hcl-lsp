@@ -57,12 +57,6 @@
                     "scope": "window",
                     "default": false,
                     "markdownDescription": "Fetch the module a unit's `terraform { source }` names from a registry (`tfr:///…`), so its variables drive completion, hover and checks in `inputs`, as a local module's do. You are asked before the first contact with each host. Requires a trusted workspace, and git 2.31 or newer for modules served from git."
-                },
-                "terragrunt.remoteModules.defaultRegistryHost": {
-                    "type": "string",
-                    "scope": "window",
-                    "default": "",
-                    "markdownDescription": "The registry `tfr:///` names, such as `registry.opentofu.org`. When empty, it is the registry of the binary Terragrunt would run. `TG_TF_DEFAULT_REGISTRY_HOST` in the environment wins over this setting."
                 }
             }
         },

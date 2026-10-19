@@ -8,13 +8,10 @@ const TOKEN_PREFIX = 'terragrunt.registryToken.';
 /** What the server is told about fetching remote module sources. */
 export interface RemoteModuleSettings {
 	enabled: boolean;
-	defaultRegistryHost?: string;
 }
 
 export function readRemoteModuleSettings(): RemoteModuleSettings {
-	const configuration = Workspace.getConfiguration(SETTINGS);
-	const host = configuration.get<string>('defaultRegistryHost', '').trim();
-	return { enabled: configuration.get<boolean>('enabled', false), ...(host ? { defaultRegistryHost: host } : {}) };
+	return { enabled: Workspace.getConfiguration(SETTINGS).get<boolean>('enabled', false) };
 }
 
 /**

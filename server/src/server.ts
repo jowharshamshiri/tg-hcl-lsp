@@ -84,15 +84,13 @@ const evaluator = new ConfigEvaluator({
 
 interface RemoteModuleSettings {
 	enabled: boolean;
-	defaultRegistryHost?: string;
 }
 
 let remoteModuleSettings: RemoteModuleSettings = { enabled: false };
 
 function readRemoteModuleSettings(value: unknown): RemoteModuleSettings {
-	const settings = value as { enabled?: unknown; defaultRegistryHost?: unknown } | undefined;
-	const host = settings?.defaultRegistryHost;
-	return { enabled: settings?.enabled === true, ...(typeof host === 'string' && host ? { defaultRegistryHost: host } : {}) };
+	const settings = value as { enabled?: unknown } | undefined;
+	return { enabled: settings?.enabled === true };
 }
 
 // A token set in the editor lives in its secret storage, and is asked for each time the parser is about to contact
@@ -119,7 +117,6 @@ function configureRemoteModules() {
 		{
 			enabled: remoteModuleSettings.enabled,
 			trusted: workspaceTrusted,
-			defaultRegistryHost: remoteModuleSettings.defaultRegistryHost,
 			disabledMessage: 'set terragrunt.remoteModules.enabled to fetch registry modules'
 		},
 		{

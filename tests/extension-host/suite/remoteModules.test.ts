@@ -12,9 +12,9 @@ function settings(): vscode.WorkspaceConfiguration {
 	return vscode.workspace.getConfiguration('terragrunt.remoteModules');
 }
 
-// Written as user settings of the test run's own profile, and put back afterwards.
-async function setting(name: 'enabled' | 'defaultRegistryHost', value: unknown): Promise<void> {
-	await settings().update(name, value, vscode.ConfigurationTarget.Global);
+// Written as a user setting of the test run's own profile, and put back afterwards.
+async function setEnabled(value: boolean | undefined): Promise<void> {
+	await settings().update('enabled', value, vscode.ConfigurationTarget.Global);
 }
 
 function problems(uri: vscode.Uri, done: (diagnostics: vscode.Diagnostic[]) => boolean): Promise<vscode.Diagnostic[]> {
@@ -47,25 +47,22 @@ suite('Remote module sources', () => {
 
 	suiteSetup(async () => {
 		await ensureActive();
+		// On the port the run's TG_TF_DEFAULT_REGISTRY_HOST names, so the fixtures' tfr:/// sources come here too.
 		registry = await TestRegistry.start({
 			'acme/vpc/aws': { files: { 'variables.tf': VPC_VARIABLES, 'main.tf': 'resource "null_resource" "vpc" {}\n' } },
 			'acme/secure/aws': { token: 'test-token', files: { 'variables.tf': VPC_VARIABLES } },
 			'acme/private/aws': { token: 'another-token', files: { 'variables.tf': VPC_VARIABLES } }
-		});
+		}, Number(process.env.TG_HCL_LSP_TEST_REGISTRY_PORT));
 		units = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-hcl-lsp-units-'));
-		// The fixtures' tfr:/// source would otherwise be fetched from the public registry, after asking a question
-		// nobody answers. Set before fetching is switched on, so no server is ever asked.
-		await setting('defaultRegistryHost', registry.host);
 	});
 
 	suiteTeardown(async () => {
-		await setting('enabled', undefined);
-		await setting('defaultRegistryHost', undefined);
+		await setEnabled(undefined);
 		await registry.stop();
 		fs.rmSync(units, { recursive: true, force: true });
 	});
 
-	teardown(() => setting('enabled', undefined));
+	teardown(() => setEnabled(undefined));
 
 	test('the commands are registered', async () => {
 		const commands = await vscode.commands.getCommands(true);
@@ -76,30 +73,29 @@ suite('Remote module sources', () => {
 
 	test('fetching is off unless switched on', () => {
 		assert.strictEqual(settings().inspect<boolean>('enabled')?.defaultValue, false);
-		assert.strictEqual(settings().inspect<string>('defaultRegistryHost')?.defaultValue, '');
 	});
 
 	test('switching fetching on and off reaches the servers', async () => {
 		const document = await openUnit('toggled', registry.source('acme/vpc/aws'), '');
 		await problems(document.uri, fetchingIsOff);
 
-		await setting('enabled', true);
+		await setEnabled(true);
 		await problems(document.uri, diagnostics => !fetchingIsOff(diagnostics));
 
-		await setting('enabled', undefined);
+		await setEnabled(undefined);
 		assert.ok(fetchingIsOff(await problems(document.uri, fetchingIsOff)), 'the hint did not come back');
 	});
 
-	test('tfr:/// means the registry named by the default host setting', async () => {
+	test('tfr:/// means the registry TG_TF_DEFAULT_REGISTRY_HOST names', async () => {
 		const requested = '/v1/modules/terraform-aws-modules/vpc/aws/versions';
 		await openFixture('remote/terragrunt.hcl');
-		await setting('enabled', true);
+		await setEnabled(true);
 		await waitFor(() => Promise.resolve(registry.count(requested)), count => count > 0);
 		assert.ok(registry.count(requested) > 0, `the registry was not asked for ${requested}`);
 	});
 
 	suite('with fetching on', () => {
-		setup(() => setting('enabled', true));
+		setup(() => setEnabled(true));
 
 		test('the module\'s variables are completed inside inputs', async () => {
 			const document = await openUnit('completed', registry.source('acme/vpc/aws'), '  ');
