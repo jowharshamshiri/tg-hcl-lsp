@@ -23,15 +23,4 @@ suite('Diagnostics', () => {
 		assert.deepStrictEqual(await published, []);
 	});
 
-	test('a registry source says how to switch fetching on while it is off', async () => {
-		const published = waitForDiagnostics(fixtureUri('remote/terragrunt.hcl'));
-		await openFixture('remote/terragrunt.hcl');
-
-		const diagnostics = await published;
-		assert.ok(
-			diagnostics.some(diagnostic => diagnostic.severity === vscode.DiagnosticSeverity.Hint
-				&& diagnostic.message.includes('terragrunt.remoteModules.enabled')),
-			`expected a hint naming the setting, got ${JSON.stringify(diagnostics)}`
-		);
-	});
 });

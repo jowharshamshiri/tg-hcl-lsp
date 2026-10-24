@@ -11,7 +11,7 @@ import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 import type { DependencyGraphNode } from './dependencyTreeHandler';
 import { EvaluatedValueUnderlines } from './evaluatedValues';
 import type { WireRange } from './evaluatedValues';
-import { HostApprovals, RegistryTokens, SETTINGS as REMOTE_MODULE_SETTINGS, readRemoteModuleSettings } from './remoteModules';
+import { HostApprovals, RegistryTokens } from './remoteModules';
 
 let defaultClient: LanguageClient | undefined;
 const clients = new Map<string, LanguageClient>();
@@ -78,7 +78,7 @@ function createClientOptions(context: ExtensionContext, outputChannel: OutputCha
 		context.subscriptions.push(fileEvents);
 	}
 	return {
-		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted, remoteModules: readRemoteModuleSettings() },
+		initializationOptions: { isWorkspaceTrusted: Workspace.isTrusted },
 		synchronize: { fileEvents },
 		// A document selector can say which files a client takes but not which it leaves, so the rootless client's
 		// also matches every file inside a workspace folder, which that folder's own client serves. Left alone, both
@@ -194,19 +194,20 @@ export function activate(context: ExtensionContext) {
 		tokens.set(typeof host === 'string' ? host : undefined)));
 	context.subscriptions.push(Commands.registerCommand('terragrunt.removeRegistryToken', () => tokens.remove()));
 
-	// A changed setting or token may change what a host answers, so hosts denied this session are asked about again.
-	// Retrying does the same on request: the servers forget their refused hosts and failed fetches, and fetch again.
+	// A changed token may change what a host answers, so hosts denied this session are asked about again. Retrying
+	// does the same on request: the servers forget their refused hosts and failed fetches, and fetch again.
 	const remoteModulesChanged = () => {
 		approvals.forgetSession();
 		for (const client of runningClients()) {
-			void client.sendNotification('terragrunt/remoteModulesChanged', readRemoteModuleSettings());
+			void client.sendNotification('terragrunt/remoteModulesChanged');
 		}
 	};
-	context.subscriptions.push(Workspace.onDidChangeConfiguration(event => {
-		if (event.affectsConfiguration(REMOTE_MODULE_SETTINGS)) remoteModulesChanged();
-	}));
 	context.subscriptions.push(tokens.onDidChange(remoteModulesChanged));
 	context.subscriptions.push(Commands.registerCommand('terragrunt.retryRemoteModules', remoteModulesChanged));
+	// A quick fix on a denied host passes the host; from the Command Palette a host with a remembered answer is picked.
+	context.subscriptions.push(Commands.registerCommand('terragrunt.forgetModuleHost', async (host?: unknown) => {
+		if (await approvals.forget(typeof host === 'string' ? host : undefined)) remoteModulesChanged();
+	}));
 
 	context.subscriptions.push(Workspace.onDidOpenTextDocument(didOpenTextDocument));
 	context.subscriptions.push(Workspace.onDidGrantWorkspaceTrust(() => {

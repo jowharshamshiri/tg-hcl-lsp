@@ -49,10 +49,10 @@ The formatter is built in, so neither Terragrunt nor OpenTofu needs to be instal
 
 ## Remote module sources
 
-A unit whose `terraform { source }` is a local path has its `inputs` completed, documented and checked against the module's variables. A registry source (`tfr:///namespace/name/provider?version=…`) gets the same once it is fetched, which is off until you switch on [`terragrunt.remoteModules.enabled`](#terragruntremotemodulesenabled). Until then, the source has a hint saying so.
+A unit whose `terraform { source }` is a local path has its `inputs` completed, documented and checked against the module's variables. A registry source (`tfr:///namespace/name/provider?version=…`) gets the same once it is fetched. Fetching contacts a network, so it waits for your answer about each host.
 
-- **Trust:** nothing is fetched in Restricted Mode.
-- **Hosts:** you are asked before the first contact with each registry or git host: **Allow** for this session, **Always Allow**, or **Deny**. Approving a registry covers the hosts it sends downloads to. A question that has left the screen waits in the notification centre, under the bell in the status bar. A prompt closed without an answer is asked again next time. After **Deny**, the module's problem offers a quick fix to ask again, as does **Terragrunt: Retry Remote Module Fetches**.
+- **Trust:** nothing is fetched in Restricted Mode; the source has a hint saying so.
+- **Hosts:** you are asked before the first contact with each registry or git host: **Allow** or **Deny** for this session, or **Always Allow** or **Always Deny**. Approving a registry covers the hosts it sends downloads to. A question that has left the screen waits in the notification centre, under the bell in the status bar. A prompt closed without an answer is asked again next time. A denied host's module has a problem on `source` with a quick fix that asks again; **Terragrunt: Forget Module Host Answer** does the same for a host you picked **Always Allow** or **Always Deny** for, and **Terragrunt: Retry Remote Module Fetches** asks again about every host denied this session.
 - **Which registry:** `tfr:///` means what it means to Terragrunt: `TG_TF_DEFAULT_REGISTRY_HOST` when it is set, else the registry of the binary Terragrunt would run, which is `registry.terraform.io` for `terraform` and `registry.opentofu.org` for anything else.
 - **What is fetched:** the module's top-level `.tf` files, from the git repository or archive the registry points to, into a per-user cache keyed by version, so each version is fetched once. **Terragrunt: Clear Remote Module Cache** empties it and fetches open units' modules again.
 - **Registry tokens:** **Terragrunt: Set Registry Token** saves a token for a host in the system keychain, through VS Code's secret storage; it is never written to settings. **Terragrunt: Remove Registry Token** deletes one. When a registry refuses a fetch for want of a token, the problem on `source` offers a quick fix that asks for one. A token is read only when its host is about to be contacted, and sent to that host alone. Without one, the token Terraform would use is found as Terraform finds it: `TF_TOKEN_<host>`, then `credentials` blocks in `~/.terraformrc` or `~/.terraform.d`, then `TG_TF_REGISTRY_TOKEN` for private registries.
@@ -69,10 +69,6 @@ Hovering an expression shows the value it evaluates to. A dotted underline marks
 | `cursorLine` (default) | the expressions on the lines that have a cursor
 | `always` | every evaluated expression in the file
 | `off` | nothing — hovering still shows the value
-
-### `terragrunt.remoteModules.enabled`
-
-Fetch registry module sources, as described in [Remote module sources](#remote-module-sources). Off by default.
 
 ## Terragrunt 1.x first
 

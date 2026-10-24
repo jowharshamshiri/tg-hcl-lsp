@@ -1,18 +1,9 @@
-import { workspace as Workspace, window as Window, Disposable, ExtensionContext } from 'vscode';
+import { window as Window, Disposable, ExtensionContext } from 'vscode';
 
-export const SETTINGS = 'terragrunt.remoteModules';
 const APPROVED_HOSTS = 'terragrunt.remoteModules.approvedHosts';
+const DENIED_HOSTS = 'terragrunt.remoteModules.deniedHosts';
 const TOKEN_HOSTS = 'terragrunt.registryTokenHosts';
 const TOKEN_PREFIX = 'terragrunt.registryToken.';
-
-/** What the server is told about fetching remote module sources. */
-export interface RemoteModuleSettings {
-	enabled: boolean;
-}
-
-export function readRemoteModuleSettings(): RemoteModuleSettings {
-	return { enabled: Workspace.getConfiguration(SETTINGS).get<boolean>('enabled', false) };
-}
 
 /**
  * A host as the parser names it: lower-cased ASCII, with the port kept only when it is not 443. An https:// prefix
@@ -31,7 +22,7 @@ export function canonicalHost(input: string): string | undefined {
 /**
  * Answers the servers' questions about contacting a host. Every server asks for itself, so the answers are kept
  * here: servers asking about the same host share one prompt, and an answer holds for the session, or for good when
- * it is Always Allow.
+ * it is Always Allow or Always Deny, until it is forgotten.
  */
 export class HostApprovals {
 	private answers = new Map<string, Promise<boolean>>();
@@ -39,7 +30,8 @@ export class HostApprovals {
 	constructor(private readonly context: ExtensionContext) {}
 
 	approve(host: string, kind: 'git' | 'registry'): Promise<boolean> {
-		if (this.approved().includes(host)) return Promise.resolve(true);
+		if (this.remembered(APPROVED_HOSTS).includes(host)) return Promise.resolve(true);
+		if (this.remembered(DENIED_HOSTS).includes(host)) return Promise.resolve(false);
 		let answer = this.answers.get(host);
 		if (!answer) {
 			answer = this.ask(host, kind);
@@ -53,18 +45,50 @@ export class HostApprovals {
 		this.answers.clear();
 	}
 
-	private approved(): string[] {
-		return this.context.globalState.get<string[]>(APPROVED_HOSTS, []);
+	/**
+	 * Forgets what was answered for a host, this session's answer and an Always Allow or Always Deny, so it is asked
+	 * about again. Without a host, the hosts with a remembered answer are offered to pick from.
+	 *
+	 * @returns whether a host was forgotten; false when none was picked.
+	 */
+	async forget(host?: string): Promise<boolean> {
+		const picked = host ?? await this.pickRemembered();
+		if (picked === undefined) return false;
+		this.answers.delete(picked);
+		for (const key of [APPROVED_HOSTS, DENIED_HOSTS]) {
+			await this.context.globalState.update(key, this.remembered(key).filter(candidate => candidate !== picked));
+		}
+		return true;
+	}
+
+	private async pickRemembered(): Promise<string | undefined> {
+		const items = [
+			...this.remembered(APPROVED_HOSTS).map(label => ({ label, description: 'always allowed' })),
+			...this.remembered(DENIED_HOSTS).map(label => ({ label, description: 'always denied' }))
+		];
+		if (items.length === 0) {
+			void Window.showInformationMessage('No module host has a remembered answer.');
+			return undefined;
+		}
+		const item = await Window.showQuickPick(items, { title: 'Forget a Module Host\'s Answer', placeHolder: 'The host to be asked about again' });
+		return item?.label;
+	}
+
+	private remembered(key: string): string[] {
+		return this.context.globalState.get<string[]>(key, []);
 	}
 
 	private async ask(host: string, kind: 'git' | 'registry'): Promise<boolean> {
 		const choice = await Window.showWarningMessage(
 			`Allow Terragrunt to fetch modules from the ${kind === 'git' ? 'git host' : 'registry'} ${host}?`,
-			'Allow', 'Always Allow', 'Deny'
+			'Allow', 'Always Allow', 'Deny', 'Always Deny'
 		);
 		// A prompt closed without an answer refuses this fetch only; the host is asked about again next time.
 		if (choice === undefined) this.answers.delete(host);
-		if (choice === 'Always Allow') await this.context.globalState.update(APPROVED_HOSTS, [...this.approved(), host]);
+		if (choice === 'Always Allow' || choice === 'Always Deny') {
+			const key = choice === 'Always Allow' ? APPROVED_HOSTS : DENIED_HOSTS;
+			await this.context.globalState.update(key, [...this.remembered(key), host]);
+		}
 		return choice === 'Allow' || choice === 'Always Allow';
 	}
 }

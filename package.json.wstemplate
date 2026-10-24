@@ -51,12 +51,6 @@
                     ],
                     "default": "cursorLine",
                     "markdownDescription": "Which expressions to underline among those whose hover shows an evaluated value. An expression is included only when its value is not already written in the source: a reference, a function call, an interpolation or an operator, never a plain literal. Requires a trusted workspace."
-                },
-                "terragrunt.remoteModules.enabled": {
-                    "type": "boolean",
-                    "scope": "window",
-                    "default": false,
-                    "markdownDescription": "Fetch the module a unit's `terraform { source }` names from a registry (`tfr:///…`), so its variables drive completion, hover and checks in `inputs`, as a local module's do. You are asked before the first contact with each host. Requires a trusted workspace, and git 2.31 or newer for modules served from git."
                 }
             }
         },
@@ -74,6 +68,11 @@
             {
                 "command": "terragrunt.retryRemoteModules",
                 "title": "Retry Remote Module Fetches",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.forgetModuleHost",
+                "title": "Forget Module Host Answer",
                 "category": "Terragrunt"
             },
             {

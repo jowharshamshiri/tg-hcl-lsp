@@ -82,17 +82,6 @@ const evaluator = new ConfigEvaluator({
 	}
 });
 
-interface RemoteModuleSettings {
-	enabled: boolean;
-}
-
-let remoteModuleSettings: RemoteModuleSettings = { enabled: false };
-
-function readRemoteModuleSettings(value: unknown): RemoteModuleSettings {
-	const settings = value as { enabled?: unknown } | undefined;
-	return { enabled: settings?.enabled === true };
-}
-
 // A token set in the editor lives in its secret storage, and is asked for each time the parser is about to contact
 // the host it is for. It is registered first, so it is redacted from every message the parser writes.
 const editorTokens: CredentialProvider = {
@@ -110,14 +99,12 @@ const credentials = chainCredentials(editorTokens, ambientCredentials({ env: pro
 const insecureRegistryHosts = (process.env.TGHCLP_INSECURE_REGISTRY_HOSTS ?? '').split(',').map(host => host.trim()).filter(Boolean);
 const registry = createRegistryResolver({ allowInsecureHosts: insecureRegistryHosts });
 
-// Configured even while fetching is off, so a remote source says how to switch it on. Configuring again forgets the
-// parser's failed fetches and host decisions, so a new token or approval is tried at once.
+// Configured even in an untrusted workspace, so a remote source says why it is not fetched. Configuring again forgets
+// the parser's failed fetches and host decisions, so a new token or approval is tried at once.
 function configureRemoteModules() {
 	workspace.configureRemoteModules(
 		{
-			enabled: remoteModuleSettings.enabled,
-			trusted: workspaceTrusted,
-			disabledMessage: 'set terragrunt.remoteModules.enabled to fetch registry modules'
+			trusted: workspaceTrusted
 		},
 		{
 			env: process.env,
@@ -249,10 +236,9 @@ async function handleDocumentChange(document: TextDocument) {
 
 connection.onInitialize((params: InitializeParams) => {
 	workspaceFolder = params.rootUri;
-	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown; remoteModules?: unknown } | undefined;
+	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown } | undefined;
 	workspaceTrusted = initializationOptions?.isWorkspaceTrusted === true;
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
-	remoteModuleSettings = readRemoteModuleSettings(initializationOptions?.remoteModules);
 	configureRemoteModules();
 	if (workspaceFolder) {
 		workspace.setWorkspaceRoot(workspaceFolder);
@@ -291,8 +277,7 @@ connection.onNotification('terragrunt/workspaceTrustChanged', (params: { isTrust
 	}
 });
 
-connection.onNotification('terragrunt/remoteModulesChanged', (params: unknown) => {
-	remoteModuleSettings = readRemoteModuleSettings(params);
+connection.onNotification('terragrunt/remoteModulesChanged', () => {
 	configureRemoteModules();
 	void Promise.all(documents.all().map(document => handleDocumentChange(document)));
 });
@@ -317,11 +302,13 @@ function fetchFailureHost(diagnostic: Diagnostic): string {
 connection.onCodeAction((params): CodeAction[] => params.context.diagnostics.flatMap((diagnostic): CodeAction[] => {
 	if (diagnostic.source !== 'terragrunt') return [];
 	if (diagnostic.code === HOST_NOT_APPROVED) {
+		// Forgetting the host's answer, Always Deny included, has it asked about again.
+		const host = fetchFailureHost(diagnostic);
 		return [{
-			title: `Ask again whether modules may be fetched from ${fetchFailureHost(diagnostic)}`,
+			title: `Ask again whether modules may be fetched from ${host}`,
 			kind: CodeActionKind.QuickFix,
 			diagnostics: [diagnostic],
-			command: { title: 'Retry Remote Module Fetches', command: 'terragrunt.retryRemoteModules' }
+			command: { title: 'Forget Module Host Answer', command: 'terragrunt.forgetModuleHost', arguments: [host] }
 		}];
 	}
 	if (diagnostic.code === REGISTRY_AUTH) {
