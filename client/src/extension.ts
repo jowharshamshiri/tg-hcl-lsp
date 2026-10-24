@@ -1,7 +1,7 @@
 import * as path from 'path';
 import {
-	workspace as Workspace, window as Window, commands as Commands, ExtensionContext, TextDocument, OutputChannel,
-	WorkspaceFolder, Uri, FileSystemWatcher, RelativePattern
+	workspace as Workspace, window as Window, commands as Commands, languages as Languages, ExtensionContext, TextDocument,
+	OutputChannel, WorkspaceFolder, Uri, FileSystemWatcher, RelativePattern
 } from 'vscode';
 
 import {
@@ -11,10 +11,17 @@ import { DependencyTreeViewProvider } from './dependencyTreeHandler';
 import type { DependencyGraphNode } from './dependencyTreeHandler';
 import { EvaluatedValueUnderlines } from './evaluatedValues';
 import type { WireRange } from './evaluatedValues';
+import { HostApprovals, RegistryTokens } from './remoteModules';
 
 let defaultClient: LanguageClient | undefined;
 const clients = new Map<string, LanguageClient>();
 let underlines: EvaluatedValueUnderlines;
+let approvals: HostApprovals;
+let tokens: RegistryTokens;
+
+function runningClients(): LanguageClient[] {
+	return [defaultClient, ...clients.values()].filter((client): client is LanguageClient => client?.isRunning() === true);
+}
 
 let _sortedWorkspaceFolders: string[] | undefined;
 function sortedWorkspaceFolders(): string[] {
@@ -99,6 +106,8 @@ export function activate(context: ExtensionContext) {
 	const outputChannel: OutputChannel = Window.createOutputChannel('tg-hcl-lsp');
 	context.subscriptions.push(outputChannel);
 	underlines = new EvaluatedValueUnderlines(context);
+	approvals = new HostApprovals(context);
+	tokens = new RegistryTokens(context);
 
 	function didOpenTextDocument(document: TextDocument): void {
 		// We are only interested in terragrunt/HCL files
@@ -167,6 +176,39 @@ export function activate(context: ExtensionContext) {
 		}
 	}));
 
+	// Every server clears the one cache they share. One at a time, each waiting for its own modules to be fetched
+	// again, so no server deletes files another is still writing.
+	context.subscriptions.push(Commands.registerCommand('terragrunt.clearRemoteModuleCache', async () => {
+		try {
+			let root: string | undefined;
+			for (const client of runningClients()) {
+				root = await client.sendRequest<string>('terragrunt/clearRemoteModuleCache');
+			}
+			void Window.showInformationMessage(root ? `The remote module cache at ${root} is cleared.` : 'No Terragrunt language server is running.');
+		} catch (error) {
+			void Window.showErrorMessage(`The remote module cache could not be cleared: ${formatError(error)}`);
+		}
+	}));
+	// A quick fix passes the host the registry refused; from the Command Palette the host is asked for.
+	context.subscriptions.push(Commands.registerCommand('terragrunt.setRegistryToken', (host?: unknown) =>
+		tokens.set(typeof host === 'string' ? host : undefined)));
+	context.subscriptions.push(Commands.registerCommand('terragrunt.removeRegistryToken', () => tokens.remove()));
+
+	// A changed token may change what a host answers, so hosts denied this session are asked about again. Retrying
+	// does the same on request: the servers forget their refused hosts and failed fetches, and fetch again.
+	const remoteModulesChanged = () => {
+		approvals.forgetSession();
+		for (const client of runningClients()) {
+			void client.sendNotification('terragrunt/remoteModulesChanged');
+		}
+	};
+	context.subscriptions.push(tokens.onDidChange(remoteModulesChanged));
+	context.subscriptions.push(Commands.registerCommand('terragrunt.retryRemoteModules', remoteModulesChanged));
+	// A quick fix on a denied host passes the host; from the Command Palette a host with a remembered answer is picked.
+	context.subscriptions.push(Commands.registerCommand('terragrunt.forgetModuleHost', async (host?: unknown) => {
+		if (await approvals.forget(typeof host === 'string' ? host : undefined)) remoteModulesChanged();
+	}));
+
 	context.subscriptions.push(Workspace.onDidOpenTextDocument(didOpenTextDocument));
 	context.subscriptions.push(Workspace.onDidGrantWorkspaceTrust(() => {
 		for (const client of [defaultClient, ...clients.values()]) {
@@ -207,6 +249,13 @@ async function startClient(
 	outputChannel: OutputChannel,
 	onFailure: () => void
 ): Promise<void> {
+	// A server asks about hosts and tokens as soon as it opens a unit with a remote source, so these are answered from
+	// the start; a request nothing answers would refuse the host.
+	context.subscriptions.push(
+		client.onRequest('terragrunt/approveHost', (params: { host: string; kind: 'git' | 'registry' }) =>
+			approvals.approve(params.host, params.kind)),
+		client.onRequest('terragrunt/registryToken', async (params: { host: string }) => await tokens.tokenFor(params.host) ?? null)
+	);
 	try {
 		await client.start();
 		setupClientHandlers(client, context);
@@ -225,6 +274,11 @@ function setupClientHandlers(client: LanguageClient, context: ExtensionContext):
 	context.subscriptions.push(
 		client.onNotification('terragrunt/evaluatableRanges', (params: { uri: string; version: number; ranges: WireRange[] }) => {
 			underlines.publish(params.uri, params.version, params.ranges);
+		}),
+		// The editor asks for a document's links when it opens or changes, and cannot be told they changed otherwise. A
+		// link provider registered and dropped again makes it ask once more, for every open editor.
+		client.onNotification('terragrunt/linksChanged', () => {
+			Languages.registerDocumentLinkProvider({ language: 'terragrunt' }, { provideDocumentLinks: () => [] }).dispose();
 		}),
 		client.onNotification('terragrunt/dependencyTreeStatus', () => {
 			DependencyTreeViewProvider.createOrShow(context.extensionUri);

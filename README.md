@@ -23,6 +23,7 @@ Install **Terragrunt Language Server** from the [VS Code Marketplace](https://ma
 - **Evaluated values** on hover, with the expressions that have one underlined — see [Settings](#settings)
 - **Show Terragrunt Lineage Graph** — a visual, interactive graph of the whole workspace covering includes, dependencies, units, nested stacks, and reading lineage, with dependency outputs surfaced from state
 - **Formatting** into the layout `terragrunt hcl format` produces, with nothing else to install — see [Formatting](#formatting)
+- **Remote module sources** — a registry module's variables drive completion, hover and checks in `inputs`, as a local module's do — see [Remote module sources](#remote-module-sources)
 - **Syntax highlighting** for Terragrunt blocks, attributes, references, and functions
 
 The lineage graph opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. **Open** is shown only for files inside the active workspace.
@@ -45,6 +46,17 @@ The lineage graph opens with the first two levels visible, provides filter and e
 **Format Document** and format on save lay a file out exactly as `terragrunt hcl format` does: two-space indentation, single spaces between tokens, and the equals signs and trailing comments of consecutive lines aligned. Only whitespace changes.
 
 The formatter is built in, so neither Terragrunt nor OpenTofu needs to be installed, and it works in Restricted Mode. A file with a syntax error is not changed; the error is among its problems and in the `tg-hcl-lsp` output.
+
+## Remote module sources
+
+A unit whose `terraform { source }` is a local path has its `inputs` completed, documented and checked against the module's variables. A registry source (`tfr:///namespace/name/provider?version=…`) gets the same once it is fetched. Fetching contacts a network, so it waits for your answer about each host.
+
+- **Trust:** nothing is fetched in Restricted Mode; the source has a hint saying so.
+- **Hosts:** you are asked before the first contact with each registry or git host: **Allow** or **Deny** for this session, or **Always Allow** or **Always Deny**. Approving a registry covers the hosts it sends downloads to. A question that has left the screen waits in the notification centre, under the bell in the status bar. A prompt closed without an answer is asked again next time. A denied host's module has a problem on `source` with a quick fix that asks again; **Terragrunt: Forget Module Host Answer** does the same for a host you picked **Always Allow** or **Always Deny** for, and **Terragrunt: Retry Remote Module Fetches** asks again about every host denied this session.
+- **Which registry:** `tfr:///` means what it means to Terragrunt: `TG_TF_DEFAULT_REGISTRY_HOST` when it is set, else the registry of the binary Terragrunt would run, which is `registry.terraform.io` for `terraform` and `registry.opentofu.org` for anything else.
+- **What is fetched:** the module's top-level `.tf` files, from the git repository or archive the registry points to, into a per-user cache keyed by version, so each version is fetched once. **Terragrunt: Clear Remote Module Cache** empties it and fetches open units' modules again.
+- **Registry tokens:** **Terragrunt: Set Registry Token** saves a token for a host in the system keychain, through VS Code's secret storage; it is never written to settings. **Terragrunt: Remove Registry Token** deletes one. When a registry refuses a fetch for want of a token, the problem on `source` offers a quick fix that asks for one. A token is read only when its host is about to be contacted, and sent to that host alone. Without one, the token Terraform would use is found as Terraform finds it: `TF_TOKEN_<host>`, then `credentials` blocks in `~/.terraformrc` or `~/.terraform.d`, then `TG_TF_REGISTRY_TOKEN` for private registries.
+- **Git:** modules served from git need git 2.31 or newer on `PATH`, and use git's own credential helpers and ssh agent; the extension holds no git credentials.
 
 ## Settings
 

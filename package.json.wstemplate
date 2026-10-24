@@ -22,7 +22,7 @@
     "capabilities": {
         "untrustedWorkspaces": {
             "supported": "limited",
-            "description": "Parsing, diagnostics, completion, formatting, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, and dependency graphs require a trusted workspace."
+            "description": "Parsing, diagnostics, completion, formatting, links, and documentation work in Restricted Mode. Semantic evaluation, command execution, file evaluation, dependency graphs, and fetching remote module sources require a trusted workspace."
         }
     },
     "main": "./dist/extension.js",
@@ -59,6 +59,31 @@
                 "command": "terragrunt.dependencyTree",
                 "title": "Show Terragrunt Lineage Graph",
                 "enableCommandUris": true
+            },
+            {
+                "command": "terragrunt.clearRemoteModuleCache",
+                "title": "Clear Remote Module Cache",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.retryRemoteModules",
+                "title": "Retry Remote Module Fetches",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.forgetModuleHost",
+                "title": "Forget Module Host Answer",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.setRegistryToken",
+                "title": "Set Registry Token",
+                "category": "Terragrunt"
+            },
+            {
+                "command": "terragrunt.removeRegistryToken",
+                "title": "Remove Registry Token",
+                "category": "Terragrunt"
             }
         ],
         "menus": {
@@ -73,6 +98,14 @@
                 {
                     "command": "terragrunt.dependencyTree",
                     "when": "editorLangId == terragrunt && isWorkspaceTrusted"
+                },
+                {
+                    "command": "terragrunt.clearRemoteModuleCache",
+                    "when": "isWorkspaceTrusted"
+                },
+                {
+                    "command": "terragrunt.retryRemoteModules",
+                    "when": "isWorkspaceTrusted"
                 }
             ]
         },

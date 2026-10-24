@@ -22,4 +22,5 @@ suite('Diagnostics', () => {
 
 		assert.deepStrictEqual(await published, []);
 	});
+
 });
