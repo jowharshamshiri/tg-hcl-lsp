@@ -12,6 +12,7 @@ import {
 	DiagnosticSeverity,
 	FileChangeType,
 	MarkupKind,
+	Range,
 	TextEdit
 } from 'vscode-languageserver/node';
 
@@ -134,13 +135,29 @@ function evaluationRoot(uri: string): string {
 	return path.dirname(filePathFromUri(uri));
 }
 
-function evaluationDiagnostic(error: string) {
-	return {
+// A fault evaluation could place is underlined where it is written. Written in a configuration this unit includes, it
+// is still this unit's problem: it stays on the first line, and points at the expression. An error with no place in
+// the configuration, such as a file that cannot be read, stays on the first line.
+function evaluationDiagnostics(evaluation: ConfigEvaluationResult, uri: string): Diagnostic[] {
+	const firstLine = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
+	const diagnostic = (message: string, range: Range): Diagnostic => ({
 		severity: DiagnosticSeverity.Warning,
-		range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
-		message: `Configuration evaluation: ${error}`,
+		range,
+		message: `Configuration evaluation: ${message}`,
 		source: 'terragrunt-evaluation'
-	};
+	});
+	if (!evaluation.problems) return [diagnostic(evaluation.error ?? '', firstLine)];
+	const documentPath = path.resolve(filePathFromUri(uri));
+	return evaluation.problems.map(problem => {
+		if (path.resolve(problem.filePath) === documentPath) return diagnostic(problem.message, problem.range);
+		return {
+			...diagnostic(problem.message, firstLine),
+			relatedInformation: [{
+				location: { uri: pathToFileURL(problem.filePath).toString(), range: problem.range },
+				message: 'The expression is written here'
+			}]
+		};
+	});
 }
 
 function valueMarkdown(value: RuntimeValue<ValueType>): string {
@@ -185,7 +202,9 @@ async function publishDiagnostics(document: TextDocument, parsedDocument: Parsed
 		const evaluation = await evaluateDocument(document.uri, document.getText());
 		// A value that cannot be known yet, such as a dependency never applied, is not a problem in the
 		// configuration, so it is not reported as one.
-		if (!evaluation.valid && evaluation.error && !evaluation.unresolved) diagnostics.push(evaluationDiagnostic(evaluation.error));
+		if (!evaluation.valid && evaluation.error && !evaluation.unresolved) {
+			diagnostics.push(...evaluationDiagnostics(evaluation, document.uri));
+		}
 	}
 	if (!isCurrent()) return false;
 	connection.sendDiagnostics({
