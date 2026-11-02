@@ -67,6 +67,7 @@ const evaluator = new ConfigEvaluator({
 	terraformCommand: '',
 	terraformCliArgs: [],
 	workspaceTrusted: false,
+	readEncryptedSops: true,
 	// The evaluator has found the dependency block in the unit's merged configuration and resolved config_path. Its
 	// outputs are the state outputs of the configuration the request names; one with none -- never applied, or
 	// state the server cannot read -- is unresolved, which is not reported as a problem.
