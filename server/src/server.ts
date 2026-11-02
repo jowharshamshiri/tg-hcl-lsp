@@ -137,8 +137,8 @@ function evaluationRoot(uri: string): string {
 
 // A fault evaluation could place is underlined where it is written. Written in a configuration this unit includes, it
 // is still this unit's problem: it stays on the first line, and points at the expression. An error with no place in
-// the configuration, such as a file that cannot be read, stays on the first line.
-function evaluationDiagnostics(evaluation: ConfigEvaluationResult, uri: string): Diagnostic[] {
+// the configuration, such as an include cycle, stays on the first line.
+function evaluationDiagnostics(error: string, problems: ConfigEvaluationResult['problems'], uri: string): Diagnostic[] {
 	const firstLine = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
 	const diagnostic = (message: string, range: Range): Diagnostic => ({
 		severity: DiagnosticSeverity.Warning,
@@ -146,9 +146,9 @@ function evaluationDiagnostics(evaluation: ConfigEvaluationResult, uri: string):
 		message: `Configuration evaluation: ${message}`,
 		source: 'terragrunt-evaluation'
 	});
-	if (!evaluation.problems) return [diagnostic(evaluation.error ?? '', firstLine)];
+	if (!problems) return [diagnostic(error, firstLine)];
 	const documentPath = path.resolve(filePathFromUri(uri));
-	return evaluation.problems.map(problem => {
+	return problems.map(problem => {
 		if (path.resolve(problem.filePath) === documentPath) return diagnostic(problem.message, problem.range);
 		return {
 			...diagnostic(problem.message, firstLine),
@@ -203,7 +203,7 @@ async function publishDiagnostics(document: TextDocument, parsedDocument: Parsed
 		// A value that cannot be known yet, such as a dependency never applied, is not a problem in the
 		// configuration, so it is not reported as one.
 		if (!evaluation.valid && evaluation.error && !evaluation.unresolved) {
-			diagnostics.push(...evaluationDiagnostics(evaluation, document.uri));
+			diagnostics.push(...evaluationDiagnostics(evaluation.error, evaluation.problems, document.uri));
 		}
 	}
 	if (!isCurrent()) return false;
