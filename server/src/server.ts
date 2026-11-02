@@ -26,7 +26,7 @@ import {
 } from 'vscode-languageserver-textdocument';
 import {
 	ambientCredentials, chainCredentials, ConfigEvaluator, createRegistryResolver, formatHcl, HclSyntaxError, LocatedWorkspaceError,
-	ParsedDocument, registerSecret, Workspace, runtimeValueToPlain
+	ParsedDocument, registerSecret, TextChange, Workspace, runtimeValueToPlain
 } from 'tghclparser';
 import type {
 	ConfigEvaluationResult, CredentialProvider, EvaluatedSpan, RuntimeValue, TerragruntConfig, TreeNode, ValueType
@@ -68,6 +68,7 @@ const evaluator = new ConfigEvaluator({
 	terraformCommand: '',
 	terraformCliArgs: [],
 	workspaceTrusted: false,
+	readEncryptedSops: true,
 	// The evaluator has found the dependency block in the unit's merged configuration and resolved config_path. Its
 	// outputs are the state outputs of the configuration the request names; one with none -- never applied, or
 	// state the server cannot read -- is unresolved, which is not reported as a problem.
@@ -181,10 +182,13 @@ async function evaluateDocument(uri: string, content: string): Promise<ConfigEva
 // that was running, so a result that arrives late is not reported over what replaced it.
 const checks = new Map<string, object>();
 
+const lastEvaluatedSpans = new Map<string, { text: string; spans: EvaluatedSpan[] }>();
+
 // Problems are only reported for open documents, and VS Code keeps a file's problems until they are replaced.
 function forgetDocument(uri: string) {
 	checks.delete(uri);
 	parsedDocuments.delete(uri);
+	lastEvaluatedSpans.delete(uri);
 	workspace.removeDocument(uri);
 	connection.sendDiagnostics({ uri, diagnostics: [] });
 }
@@ -219,7 +223,7 @@ async function handleDocumentChange(document: TextDocument) {
 	checks.set(document.uri, check);
 	const isCurrent = () => checks.get(document.uri) === check;
 	try {
-		const parsedDocument = new ParsedDocument(workspace, document.uri, document.getText());
+		const parsedDocument = new ParsedDocument(workspace, document.uri, document.getText(), parsedDocuments.get(document.uri));
 		parsedDocuments.set(document.uri, parsedDocument);
 
 		await workspace.addDocument(parsedDocument);
@@ -444,7 +448,22 @@ connection.onHover(async (params) => {
 // The spans whose values are worth revealing: literals that already read as their value are left out by the evaluator.
 async function evaluatedSpans(document: TextDocument): Promise<EvaluatedSpan[]> {
 	if (!workspaceTrusted) return [];
-	return evaluator.evaluatedSpans(filePathFromUri(document.uri), document.getText(), evaluationRoot(document.uri));
+	const text = document.getText();
+	if (parsedDocuments.get(document.uri)?.getAST() !== null) {
+		const spans = await evaluator.evaluatedSpans(filePathFromUri(document.uri), text, evaluationRoot(document.uri));
+		lastEvaluatedSpans.set(document.uri, { text, spans });
+		const parsedDocument = parsedDocuments.get(document.uri);
+		if (parsedDocument?.getContent() === text) parsedDocument.setEvaluatedSpans(spans);
+		return spans;
+	}
+	const last = lastEvaluatedSpans.get(document.uri);
+	if (!last) return [];
+	const change = new TextChange(last.text, text);
+	return last.spans.flatMap(span => {
+		const start = change.toAfter(span.start, 'start');
+		const end = change.toAfter(span.end, 'end');
+		return start === undefined || end === undefined ? [] : [{ ...span, start, end }];
+	});
 }
 
 // The narrowest span under the cursor, so a hover shows the value its underline stands for.
