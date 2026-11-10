@@ -36,7 +36,11 @@ coverage
 *.sw?
 
 .env
-.wsb/
+.wsb/wsb.db
+.wsb/state.json
+.wsb/sessions.db*
+.wsb/logs/
+.wsb/workbench.json
 
 *.log
 .scrap/

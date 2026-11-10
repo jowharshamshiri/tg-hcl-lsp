@@ -1,0 +1,10 @@
+{
+  "name": "tg-hcl-lsp",
+  "alias": "tg_hcl_lsp",
+  "templates_root": "..",
+  "version": {
+    "major": 1,
+    "file": "version.txt",
+    "detect_manifests": true
+  }
+}
