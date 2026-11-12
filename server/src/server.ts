@@ -222,8 +222,9 @@ async function handleDocumentChange(document: TextDocument) {
 	const check = {};
 	checks.set(document.uri, check);
 	const isCurrent = () => checks.get(document.uri) === check;
+	let parsedDocument: ParsedDocument | undefined;
 	try {
-		const parsedDocument = new ParsedDocument(workspace, document.uri, document.getText(), parsedDocuments.get(document.uri));
+		parsedDocument = new ParsedDocument(workspace, document.uri, document.getText(), parsedDocuments.get(document.uri));
 		parsedDocuments.set(document.uri, parsedDocument);
 
 		await workspace.addDocument(parsedDocument);
@@ -243,7 +244,7 @@ async function handleDocumentChange(document: TextDocument) {
 		const here = located?.uri === document.uri;
 		connection.sendDiagnostics({
 			uri: document.uri,
-			diagnostics: [{
+			diagnostics: [...(parsedDocument?.getDiagnostics() ?? []), {
 				severity: 1,
 				range: located && here ? located.range : { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
 				message: error instanceof Error ? error.message : String(error),
