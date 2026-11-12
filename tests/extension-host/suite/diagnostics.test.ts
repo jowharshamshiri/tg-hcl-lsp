@@ -35,4 +35,19 @@ suite('Diagnostics', () => {
 			['Configuration evaluation: Missing attribute "zone" on "config"', 6, 11, 28]
 		]);
 	});
+
+	test('a workspace error is reported alongside the file\'s other problems', async () => {
+		const published = waitForDiagnostics(fixtureUri('shared-root/root.hcl'));
+		await openFixture('shared-root/root.hcl');
+
+		const messages = (await published).map(diagnostic => [diagnostic.source, diagnostic.message]);
+		assert.ok(
+			messages.some(([source, message]) => source === 'terragrunt-workspace' && message === 'Could not find stage.hcl in parent folders'),
+			`expected the workspace error, got ${JSON.stringify(messages)}`
+		);
+		assert.ok(
+			messages.some(([, message]) => message === 'Unknown attribute "bad_property" in remote_state block'),
+			`expected the unknown attribute, got ${JSON.stringify(messages)}`
+		);
+	});
 });
