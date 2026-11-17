@@ -123,6 +123,10 @@
                     ".hcl"
                 ],
                 "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./media/terragrunt-file-light.svg",
+                    "dark": "./media/terragrunt-file-dark.svg"
+                },
                 "aliases": [
                     "Terragrunt",
                     "HCL"
