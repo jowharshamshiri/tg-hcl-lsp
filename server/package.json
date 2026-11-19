@@ -1,7 +1,7 @@
 {
 	"name": "hcl-lsp-server",
 	"description": "Terragrunt HCL Language Server",
-	"version": "1.175.826",
+	"version": "1.177.846",
 	"author": "Bahram Shamshiri",
 	"license": "MIT",
 	"publisher": "jowharshamshiri",

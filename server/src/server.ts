@@ -421,7 +421,10 @@ connection.onHover(async (params) => {
 		}
 
 		const hoverResult = await parsedDocument.getHoverInfo(params.position);
-		const evaluated = narrowestSpanAt(await evaluatedSpans(document), document.offsetAt(params.position))?.value;
+		// A hover shows a value: the elements a for expression's variable takes are for completing it, not the value of
+		// its collection.
+		const values = (await evaluatedSpans(document)).filter(span => span.kind === 'name' || span.kind === 'expression');
+		const evaluated = narrowestSpanAt(values, document.offsetAt(params.position))?.value;
 		if (!hoverResult && !evaluated) {
 			return null;
 		}
