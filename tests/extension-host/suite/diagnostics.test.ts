@@ -42,7 +42,8 @@ suite('Diagnostics', () => {
 
 		const messages = (await published).map(diagnostic => [diagnostic.source, diagnostic.message]);
 		assert.ok(
-			messages.some(([source, message]) => source === 'terragrunt-workspace' && message === 'Could not find stage.hcl in parent folders'),
+			messages.some(([source, message]) => source === 'terragrunt-workspace'
+				&& /^Dependency path .*nothing-here contains neither terragrunt\.hcl nor terragrunt\.stack\.hcl$/.test(String(message))),
 			`expected the workspace error, got ${JSON.stringify(messages)}`
 		);
 		assert.ok(

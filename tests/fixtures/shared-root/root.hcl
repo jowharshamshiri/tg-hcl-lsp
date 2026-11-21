@@ -1,5 +1,5 @@
-locals {
-  stage_vars = read_terragrunt_config(find_in_parent_folders("stage.hcl"))
+dependency "nothing" {
+  config_path = "../nothing-here"
 }
 
 remote_state {
