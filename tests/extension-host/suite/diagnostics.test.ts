@@ -32,7 +32,7 @@ suite('Diagnostics', () => {
 			.map(diagnostic => [diagnostic.message, diagnostic.range.start.line, diagnostic.range.start.character, diagnostic.range.end.character]);
 		assert.deepStrictEqual(faults, [
 			['Configuration evaluation: Undefined local value "missing"', 5, 11, 24],
-			['Configuration evaluation: Missing attribute "zone" on "config"', 6, 11, 28]
+			['Configuration evaluation: This object does not have an attribute named "zone".', 6, 11, 28]
 		]);
 	});
 
