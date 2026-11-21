@@ -101,21 +101,17 @@ const credentials = chainCredentials(editorTokens, ambientCredentials({ env: pro
 const insecureRegistryHosts = (process.env.TGHCLP_INSECURE_REGISTRY_HOSTS ?? '').split(',').map(host => host.trim()).filter(Boolean);
 const registry = createRegistryResolver({ allowInsecureHosts: insecureRegistryHosts });
 
-// Configured even in an untrusted workspace, so a remote source says why it is not fetched. Configuring again forgets
-// the parser's failed fetches and host decisions, so a new token or approval is tried at once.
+// Configured even in an untrusted workspace, so a remote source says why it is not fetched; the workspace fetches only
+// once it is trusted. Configuring again forgets the parser's failed fetches and host decisions, so a new token or
+// approval is tried at once.
 function configureRemoteModules() {
-	workspace.configureRemoteModules(
-		{
-			trusted: workspaceTrusted
-		},
-		{
-			env: process.env,
-			credentials,
-			registry,
-			allowedHosts: insecureRegistryHosts,
-			approveHost: (host, kind) => connection.sendRequest<boolean>('terragrunt/approveHost', { host, kind })
-		}
-	);
+	workspace.configureRemoteModules({
+		env: process.env,
+		credentials,
+		registry,
+		allowedHosts: insecureRegistryHosts,
+		approveHost: (host, kind) => connection.sendRequest<boolean>('terragrunt/approveHost', { host, kind })
+	});
 }
 
 function filePathFromUri(uri: string): string {
@@ -263,6 +259,7 @@ connection.onInitialize((params: InitializeParams) => {
 	const initializationOptions = params.initializationOptions as { isWorkspaceTrusted?: unknown } | undefined;
 	workspaceTrusted = initializationOptions?.isWorkspaceTrusted === true;
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
+	workspace.setTrusted(workspaceTrusted);
 	configureRemoteModules();
 	if (workspaceFolder) {
 		workspace.setWorkspaceRoot(workspaceFolder);
@@ -295,6 +292,7 @@ connection.onInitialize((params: InitializeParams) => {
 connection.onNotification('terragrunt/workspaceTrustChanged', (params: { isTrusted: boolean }) => {
 	workspaceTrusted = params.isTrusted === true;
 	evaluator.setWorkspaceTrusted(workspaceTrusted);
+	workspace.setTrusted(workspaceTrusted);
 	configureRemoteModules();
 	if (workspaceTrusted) {
 		void Promise.all(documents.all().map(document => handleDocumentChange(document)));

@@ -28,6 +28,8 @@ Install **Terragrunt Language Server** from the [VS Code Marketplace](https://ma
 
 The lineage graph opens with the first two levels visible, provides filter and expand/collapse controls, preserves the filter between views, uses full-row targets, and reports loading and empty states explicitly. **Open** is shown only for files inside the active workspace.
 
+The graph lists the files each unit reads as `terragrunt find --reading` does, so it needs a trusted workspace: finding them evaluates each configuration as Terragrunt's discovery does, running `run_cmd`, decrypting sops files and calling the other functions in what discovery evaluates. In Restricted Mode the graph is not shown.
+
 ## What it understands
 
 - `terragrunt.hcl` and named shared unit configurations such as `root.hcl`
