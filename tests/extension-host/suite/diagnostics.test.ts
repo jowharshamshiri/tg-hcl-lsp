@@ -16,6 +16,22 @@ suite('Diagnostics', () => {
 		);
 	});
 
+	test('every syntax error in a file is shown, not only the first, as Terragrunt 1.2.2 reports them', async () => {
+		const published = waitForDiagnostics(fixtureUri('several-errors/terragrunt.hcl'));
+		await openFixture('several-errors/terragrunt.hcl');
+
+		// The parser carries on after the missing operand in locals, past the valid terraform block, to the two halves
+		// of the surrogate pair in inputs, each refused at its own escape.
+		const errors = (await published)
+			.filter(diagnostic => diagnostic.severity === vscode.DiagnosticSeverity.Error)
+			.map(diagnostic => [diagnostic.source, diagnostic.message, diagnostic.range.start.line, diagnostic.range.start.character, diagnostic.range.end.line, diagnostic.range.end.character]);
+		assert.deepStrictEqual(errors, [
+			['terragrunt', 'Invalid expression: Expected the start of an expression, but found an invalid expression token.', 1, 17, 2, 0],
+			['terragrunt', 'Invalid escape sequence: Cannot encode character U+d83d in UTF-8.', 9, 11, 9, 17],
+			['terragrunt', 'Invalid escape sequence: Cannot encode character U+de00 in UTF-8.', 9, 17, 9, 23]
+		]);
+	});
+
 	test('a valid unit has no problems', async () => {
 		const published = waitForDiagnostics(fixtureUri('clean/terragrunt.hcl'));
 		await openFixture('clean/terragrunt.hcl');
